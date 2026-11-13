@@ -103,7 +103,11 @@
   const fragments = quote => String(quote || '').split(/\s*(?:\.{3,}|…|\[\.{3}\]|\s-\s)\s*/).map(norm).filter(f => f.length >= 6);
   const quoteInItem = (item, quote) => {
     const hay = norm(item.name + ' ' + item.spec), fr = fragments(quote);
-    return fr.length > 0 && fr.every(f => hay.includes(f));
+    if (fr.length > 0 && fr.every(f => hay.includes(f))) return true;
+    // A táblázat sortörései miatt a szóközök eltérhetnek: csak a betűket és számokat hasonlítjuk.
+    const squash = x => norm(x).replace(/[^a-z0-9áéíóöőúüű]+/g, '');
+    const sh = squash(item.name + ' ' + item.spec), sq = fr.map(squash).filter(f => f.length >= 6);
+    return sq.length > 0 && sq.every(f => sh.includes(f));
   };
 
   root.Parse = { readWorkbook, readDocument, makeDocIndex, locateQuote, quoteInItem, clean };
