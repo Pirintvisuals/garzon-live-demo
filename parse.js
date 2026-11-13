@@ -77,9 +77,12 @@
   /* Idézet-ellenőrzés: a modell által adott idézetet megkeressük a forrásszövegben. */
   const norm = s => String(s || '').toLowerCase().replace(/[„”"'’‘`´]/g, '').replace(/\s+/g, ' ').trim();
 
+  // Laza egyezés: a szerződésminták csillagos, szögletes zárójeles betoldásait ("* [nem releváns rész törlendő]") figyelmen kívül hagyjuk.
+  const loose = s => norm(s).replace(/\[[^\]]*\]/g, ' ').replace(/[*]/g, ' ').replace(/[^a-z0-9áéíóöőúüű%]+/g, ' ').trim();
+
   function makeDocIndex(text) {
     const paras = String(text || '').split(/\r?\n/).map(clean).filter(Boolean);
-    return { paras, normParas: paras.map(norm), normAll: norm(paras.join(' ')) };
+    return { paras, normParas: paras.map(norm), looseParas: paras.map(loose), normAll: norm(paras.join(' ')) };
   }
 
   function locateQuote(index, quote) {
@@ -91,6 +94,8 @@
     const head = q.slice(0, Math.min(60, q.length));
     i = index.normParas.findIndex(p => p.includes(head));
     if (i >= 0) return { found: true, para: i + 1, text: index.paras[i], partial: true };
+    const lq = loose(quote);
+    if (lq.length >= 12) { i = index.looseParas.findIndex(p => p.includes(lq)); if (i >= 0) return { found: true, para: i + 1, text: index.paras[i], partial: true }; }
     return { found: index.normAll.includes(q) };
   }
 

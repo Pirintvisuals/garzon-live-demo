@@ -11,6 +11,7 @@ Három dolgot készít elő a cégvezetésnek és az árajánlatadónak.
 
 1. osszefoglalo: egyoldalas vezetői összefoglaló arról, érdemes-e és milyen feltételekkel ajánlatot adni.
    A "feltetelek" tömbben minden, az árat vagy a kockázatot érintő feltétel külön sor (például: ajánlattételi határidő, teljesítési határidő, teljesítés helye, fizetési feltétel, előleg, kötbér, jótállás, értékelési szempont, részajánlat, szállítás és szerelés, kötelező igazolások, minták, alkalmassági követelmény).
+   Ha a dokumentumban szerepel, ezeket mindig sorolja fel: teljesítési határidő, fizetési feltétel és előleg, késedelmi kötbér mértéke és maximuma, meghiúsulási kötbér, jótállás, értékelési szempont, részajánlat szabálya, szállítás és szerelés, teljesítési helyszínek száma.
    A "kockazatok" tömbben azok a pontok, amelyek egy gyártó cégnek pénzbe vagy kockázatba kerülnek (rövid határidő, magas kötbér, előleg hiánya, sok helyszín, bizonytalan műszaki tartalom).
 2. ellenorzes: a dokumentum és a tételjegyzék összevetése. Olyan megállapítások, ahol
    - a dokumentum olyan követelményt ír elő, amelyet a tételek leírása nem tartalmaz, vagy amely több tétel árát érinti;

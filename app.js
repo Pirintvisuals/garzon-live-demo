@@ -283,7 +283,7 @@
   function questionsText() {
     const o = st.tender.osszefoglalo;
     return `Tisztelt Ajánlatkérő!\n\nA(z) „${o.targy}” tárgyú eljárásban az alábbi kiegészítő tájékoztatást kérjük:\n\n` +
-      st.tender.kerdesek.map((q, n) => `${n + 1}. ${q.kerdes}`).join('\n\n') + `\n\nVálaszukat előre is köszönjük.\n\nTisztelettel:\nGarzon Bútor Zrt.`;
+      st.tender.kerdesek.map((q, n) => `${n + 1}. ${cleanQ(q.kerdes)}`).join('\n\n') + `\n\nVálaszukat előre is köszönjük.\n\nTisztelettel:\nGarzon Bútor Zrt.`;
   }
   function viewQuestions() {
     const el = $('#view-kerdesek');
