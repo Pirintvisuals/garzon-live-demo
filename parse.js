@@ -137,22 +137,33 @@
       const vp = page.getViewport({ scale: Math.min(2.2, 1500 / base.width) });
       const canvas = document.createElement('canvas');
       canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp, intent: 'print' }).promise; // 'print': háttérben lévő lapon sem áll meg a rajzolás
       images.push({ n, data: canvas.toDataURL('image/jpeg', 0.72).split(',')[1] });
       canvas.width = canvas.height = 0;
     }
     const batches = [];
     for (let i = 0; i < images.length; i += 3) batches.push(images.slice(i, i + 3));
-    const out = new Array(batches.length); let done = 0, next = 0;
+    const out = new Array(batches.length); let done = 0, next = 0; const failed = [];
+    // Ha egy adag nem sikerül, oldalanként újrapróbáljuk; ami így sem megy, azt kihagyjuk és jelezzük.
+    const readBatch = async batch => {
+      try { return (await ocr({ pages: batch })).text; } catch (e) {
+        let text = '';
+        for (const pg of batch) {
+          try { text += (await ocr({ pages: [pg] })).text + '\n'; }
+          catch (e2) { failed.push(pg.n); text += PAGE(pg.n) + '\n[Az oldal szövegfelismerése nem sikerült.]\n'; }
+        }
+        return text;
+      }
+    };
     const worker = async () => {
       while (next < batches.length) {
         const k = next++;
-        out[k] = (await ocr({ pages: batches[k] })).text;
+        out[k] = await readBatch(batches[k]);
         done += batches[k].length; if (onProgress) onProgress(done, images.length);
       }
     };
-    await Promise.all(Array.from({ length: Math.min(8, batches.length) }, worker));
-    return out.join('\n');
+    await Promise.all(Array.from({ length: Math.min(9, batches.length) }, worker));
+    return { text: out.join('\n'), failed: failed.sort((a, b) => a - b) };
   }
 
   /*
@@ -171,7 +182,8 @@
       if (t.chars >= 150 * t.pages) return { fileName: file.name, text: t.text, pages: t.pages };
       if (onProgress) onProgress(0, t.pages);
       if (!ocr) throw new Error('Szkennelt PDF, a szövegfelismerés nem érhető el (' + file.name + ').');
-      return { fileName: file.name, text: await pdfOcr(t.pdf, ocr, onProgress), pages: t.pages, scanned: true };
+      const o = await pdfOcr(t.pdf, ocr, onProgress);
+      return { fileName: file.name, text: o.text, pages: t.pages, scanned: true, failedPages: o.failed };
     }
     throw new Error('A dokumentumot .pdf, .docx vagy .txt formátumban tudom olvasni (' + file.name + ').');
   }

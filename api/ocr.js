@@ -24,7 +24,8 @@ module.exports = async (req, res) => {
       parts.push({ text: 'Oldalszám: ' + Number(p.n) });
       parts.push({ inlineData: { mimeType: 'image/jpeg', data: String(p.data) } });
     }
-    const out = await gemini({ system: SYSTEM, json: false, thinking: 'low', maxOutputTokens: 16000, parts });
+    // Az átíráshoz gyorsabb modell is elég; ha a megadott név nem létezik, a közös kód az alapértelmezettre vált.
+    const out = await gemini({ system: SYSTEM, json: false, thinking: 'low', maxOutputTokens: 16000, parts, modelOverride: process.env.GEMINI_OCR_MODEL || 'gemini-3-flash-preview' });
     res.status(200).json({ text: out.data, model: out.model });
   } catch (e) {
     res.status(502).json({ error: String(e.message || e) });

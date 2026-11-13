@@ -13,11 +13,12 @@ function guard(req, res) {
   return true;
 }
 
-async function gemini({ system, user, parts, schema, json = true, maxOutputTokens = 32000, thinking }) {
+async function gemini({ system, user, parts, schema, json = true, maxOutputTokens = 32000, thinking, modelOverride }) {
   // A beállított modellnév tisztítása ("Gemini 2.5 Pro", "models/gemini-2.5-pro" is működjön); hibás névnél az alapértelmezett.
   const DEFAULT_MODEL = 'gemini-3.1-pro-preview';
   let model = String(process.env.GEMINI_MODEL || '').trim().toLowerCase().replace(/^models\//, '').replace(/\s+/g, '-');
   if (!/^gemini-[a-z0-9.-]+$/.test(model)) model = DEFAULT_MODEL;
+  if (modelOverride && /^gemini-[a-z0-9.-]+$/.test(modelOverride)) model = modelOverride;
   const body = {
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: 'user', parts: parts || [{ text: user }] }],
