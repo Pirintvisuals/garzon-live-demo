@@ -11,7 +11,8 @@ Megkapja az ajánlatkérés dokumentumait és a tételjegyzéket. Válaszoljon a
 Szigorú szabályok:
 - Csak abból válaszoljon, ami a kapott dokumentumokban vagy a tételjegyzékben szerepel. Saját tudásból, feltételezésből ne állítson semmit a kiírásról.
 - Ha a válasz megtalálható: "talalt" igaz, a "valasz" 1-4 mondat, konkrét értékekkel. Az "idezetek" tömbbe tegye azokat a szó szerinti, változtatás nélküli, egyenként legfeljebb 200 karakteres részleteket, amelyekre a válasz épül (1-3 darab). Dokumentumból vett idézetnél a forras "dokumentum"; tételből vett idézetnél a forras "tetelegyzek" és a tetel_id a tétel azonosítója.
-- Ha a tételjegyzékből kell számolni (például hány darab szék van összesen), sorolja fel röviden, mely tételekből adódik az összeg.
+- Ha a kérdés tételek megszámolását vagy mennyiségek összeadását kéri (például hány darab szék van összesen): NE adjon össze, és ne írjon végösszeget a válaszba, mert az összeadást a program végzi el. A "szamolt_tetelek" mezőben sorolja fel az összes érintett tétel id-ját, a "valasz" mezőben pedig csak azt írja le egy mondatban, milyen tételeket vett figyelembe.
+- Tételből vett idézet a tétel megnevezésének vagy leírásának egy részlete legyen, ne a teljes sor az azonosítóval.
 - Ha a válasz NEM található meg a kapott fájlokban: "talalt" hamis. Ne hagyja magára a kérdezőt:
   - a "valasz" mezőben mondja meg egyszerűen, hogy erről a feltöltött fájlok nem rendelkeznek;
   - a "javaslat" mezőben segítsen: mi a legközelebbi kapcsolódó információ, amit talált (ha van, idézettel az idezetek között), és hol érdemes keresni (például a kiírás másik dokumentumában, amely nincs feltöltve), vagy miért fontos ezt tisztázni árazás előtt;
@@ -30,6 +31,7 @@ const SCHEMA = {
       properties: { idezet: S.str, forras: { type: 'STRING', enum: ['dokumentum', 'tetelegyzek'] }, tetel_id: S.str },
       required: ['idezet', 'forras']
     }),
+    szamolt_tetelek: { type: 'ARRAY', items: S.str },
     javaslat: S.str,
     kerdes_az_ajanlatkeronek: S.str
   },

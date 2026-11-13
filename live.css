@@ -206,3 +206,13 @@ table.price td:first-child { min-width: 220px; }
 .chat-f input { flex: 1; min-width: 0; font: 14px var(--sans); padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius); }
 .chat-f input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 @media print { #chat { display: none; } }
+
+.chat-b { overflow-x: hidden; }
+.chat-b > * { flex: 0 0 auto; }
+.cm { overflow-wrap: anywhere; min-width: 0; }
+.cm.q { width: fit-content; max-width: 85%; }
+.cm.a { width: 92%; }
+.cm .quote .q-src { white-space: normal; text-align: left; }
+.cm-sum { margin: 6px 0; padding: 8px 10px; background: var(--ok-bg); border-radius: 5px; font-size: 13px; }
+.cm-sum span { color: var(--muted); font-size: 12px; }
+.cm-sum ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; font-size: 12.5px; }

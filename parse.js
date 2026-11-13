@@ -211,6 +211,7 @@
   // Laza egyezés: a szerződésminták csillagos, szögletes zárójeles betoldásait ("* [nem releváns rész törlendő]") figyelmen kívül hagyjuk.
   const loose = s => norm(s).replace(/\[[^\]]*\]/g, ' ').replace(/[*]/g, ' ').replace(/[^a-z0-9áéíóöőúüű%]+/g, ' ').trim();
 
+  const squashText = x => norm(x).replace(/[^a-z0-9áéíóöőúüű]+/g, '');
   function makeDocIndex(text) {
     const paras = [], meta = [];
     let file = '', page = 0;
@@ -220,7 +221,10 @@
       m = line.match(/^#{3,}\s*OLDAL\s*(\d+)\s*#{3,}$/); if (m) { page = Number(m[1]); continue; }
       paras.push(line); meta.push({ file, page });
     }
-    return { paras, meta, normParas: paras.map(norm), looseParas: paras.map(loose), normAll: norm(paras.join(' ')) };
+    // Csak betűk és számok, bekezdéshatárok nélkül: a PDF sortörései és elválasztásai miatt több bekezdésen átnyúló idézethez.
+    const sq = paras.map(squashText), starts = [];
+    let pos = 0; sq.forEach(x => { starts.push(pos); pos += x.length; });
+    return { paras, meta, normParas: paras.map(norm), looseParas: paras.map(loose), normAll: norm(paras.join(' ')), sqAll: sq.join(''), sqStarts: starts };
   }
 
   function locateQuote(index, quote) {
@@ -234,6 +238,11 @@
     if (i >= 0) return { found: true, para: i + 1, text: index.paras[i], partial: true };
     const lq = loose(quote);
     if (lq.length >= 12) { i = index.looseParas.findIndex(p => p.includes(lq)); if (i >= 0) return { found: true, para: i + 1, text: index.paras[i], partial: true }; }
+    const sqq = squashText(quote);
+    if (sqq.length >= 16 && index.sqAll) {
+      const at = index.sqAll.indexOf(sqq);
+      if (at >= 0) { let k = 0; while (k + 1 < index.sqStarts.length && index.sqStarts[k + 1] <= at) k++; return { found: true, para: k + 1, text: index.paras[k], partial: true }; }
+    }
     return { found: index.normAll.includes(q) };
   }
 

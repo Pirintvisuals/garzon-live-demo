@@ -554,12 +554,17 @@
     else if (m.err) a = `<div class="cm a err">Nem sikerült válaszolni: ${esc(m.err)}</div>`;
     else if (m.a) {
       const r = m.a;
-      a = `<div class="cm a ${r.talalt ? '' : 'nf'}"><p>${esc(r.valasz)}</p>
+      // Összeadás: a modell csak a tételeket jelöli meg, az összeget a kód számolja a táblázat mennyiségeiből.
+      const cnt = [...new Set(r.szamolt_tetelek || [])].map(itemById).filter(Boolean);
+      const sum = cnt.length ? `<div class="cm-sum"><b>Összesen: ${esc(qtyText(cnt))}</b> <span>(${cnt.length} tételből, a táblázat mennyiségei alapján összeadva)</span><ul>${cnt.map(i => `<li>${esc(i.name.trim())}: ${fmt(i.qty)} ${esc(i.unit)} <span class="faint">(${esc(i.id)})</span></li>`).join('')}</ul></div>` : '';
+      // Tételre hivatkozó idézet: ha a szöveg nem szó szerinti, a tétel megnevezését mutatjuk, a forrás így is a tétel sora.
+      const qv = q => { const it = q.tetel_id && itemById(q.tetel_id); return it && !Parse.quoteInItem(it, q.idezet) ? it.name.trim() : q.idezet; };
+      a = `<div class="cm a ${r.talalt ? '' : 'nf'}"><p>${esc(r.valasz)}</p>${sum}
         ${!r.talalt && r.javaslat ? `<p class="cm-help">${esc(r.javaslat)}</p>` : ''}
-        ${(r.idezetek || []).map(q => quoteSrc(q.idezet, q.forras, q.tetel_id ? [q.tetel_id] : null)).join('')}
+        ${cnt.length ? '' : (r.idezetek || []).map(q => quoteSrc(qv(q), q.forras, q.tetel_id ? [q.tetel_id] : null)).join('')}
         ${!r.talalt && r.kerdes_az_ajanlatkeronek && st.tender ? (m.added
           ? '<div class="cm-added">✓ Felvéve a Kérdések közé</div>'
-          : `<div class="cm-ask"><span>Ezt érdemes megkérdezni az ajánlatkérőtől:</span><em>${esc(r.kerdes_az_ajanlatkeronek)}</em><button class="btn btn-sm" data-addq="${n}">Felvétel a Kérdések közé</button></div>`) : ''}</div>`;
+          : `<div class="cm-ask"><span>Ezt érdemes megkérdezni az ajánlatkérőtől:</span><em>${esc(cleanQ(r.kerdes_az_ajanlatkeronek))}</em><button class="btn btn-sm" data-addq="${n}">Felvétel a Kérdések közé</button></div>`) : ''}</div>`;
     }
     return `<div class="cm q">${esc(m.q)}</div>${a}`;
   }
@@ -729,7 +734,7 @@
     else if (t.dataset.chatq) askChat(t.dataset.chatq);
     else if (t.dataset.addq !== undefined) {
       const m = st.chat.msgs[Number(t.dataset.addq)];
-      if (m && m.a && st.tender) { st.tender.kerdesek.push({ kerdes: m.a.kerdes_az_ajanlatkeronek, miert: 'A csevegésben merült fel; a feltöltött dokumentumok nem adnak rá választ.', erintett_tetelek: [] }); m.added = true; render(); }
+      if (m && m.a && st.tender) { st.tender.kerdesek.push({ kerdes: cleanQ(m.a.kerdes_az_ajanlatkeronek), miert: 'A csevegésben merült fel; a feltöltött dokumentumok nem adnak rá választ.', erintett_tetelek: [] }); m.added = true; render(); }
     }
     else if (t.dataset.remove) { e.preventDefault(); removeFile(t.dataset.remove, t.dataset.name); }
     else if (t.dataset.sample) loadSample(t.dataset.sample);
