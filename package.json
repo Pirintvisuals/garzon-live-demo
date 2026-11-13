@@ -1,0 +1,7 @@
+{
+  "name": "garzon-live",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": { "dev": "node dev-server.js" },
+  "engines": { "node": ">=20" }
+}

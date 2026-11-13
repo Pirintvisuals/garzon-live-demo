@@ -1,0 +1,6 @@
+forras/
+.env.local
+.env
+node_modules/
+.vercel/
+.claude/
