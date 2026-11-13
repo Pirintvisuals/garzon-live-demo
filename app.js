@@ -63,7 +63,7 @@
   };
 
   const fresh = () => ({
-    sample: '', rev: null, prices: {},
+    sample: '', rev: null, prices: {}, todo: {},
     tab: 'feltoltes', files: { sheet: null, doc: null }, book: null, doc: null, docIndex: null,
     ai: {}, tender: null, partStatus: {}, tenderStatus: 'idle', tenderError: '',
     docs: [], reading: '', running: false, startedAt: 0, elapsedMs: 0, model: '', filter: { maker: '', part: '', onlyNotes: false }, fromSaved: false
@@ -228,6 +228,29 @@
       ? `<button class="q-src q-open" ${attr} data-quote="${esc(quote)}" title="Megnyitás a forrásban">Forrás: ${where} ›</button>`
       : '<span class="q-src">Az idézet szó szerint nem található a forrásban, kérjük ellenőrizze.</span>'}</div>`;
   }
+  /* ---------- Teendők: mit kell tenni ezzel az ajánlatkéréssel (az eredményekből összeállítva) ---------- */
+  function todoList() {
+    const all = items(), n = test => all.filter(i => test(makerOf(i))).length;
+    const blocked = [...new Set(errorNotes().map(e => e.it.id))].length;
+    const work = [];
+    if (st.tender && st.tender.kerdesek.length) work.push({ id: 'w-kerdes', text: `${st.tender.kerdesek.length} kérdés elküldése az ajánlatkérőnek`, hint: 'A levél vázlata kész; a kiegészítő tájékoztatás kérésének határideje a kiírásban szerepel.', tab: 'kerdesek' });
+    if (blocked) work.push({ id: 'w-hiba', text: `${blocked} hibás vagy ellentmondásos tétel tisztázása árazás előtt`, hint: 'Ezeket a válasz megérkezéséig érdemes feltételesen árazni.', tab: 'ellenorzes' });
+    if (n(m => m === 'beszallitoi')) work.push({ id: 'w-besz', text: `Beszállítói árajánlat bekérése ${n(m => m === 'beszallitoi')} tételre`, hint: 'Az ajánlatkérő szöveg kimásolható.', tab: 'bontas' });
+    if (n(m => m === 'fa' || m === 'fa_fem')) work.push({ id: 'w-fa', text: `Faüzem: ${n(m => m === 'fa' || m === 'fa_fem')} tétel árazása`, tab: 'bontas' });
+    if (n(m => m === 'fem' || m === 'fa_fem')) work.push({ id: 'w-fem', text: `Fémüzem: ${n(m => m === 'fem' || m === 'fa_fem')} tétel árazása`, tab: 'bontas' });
+    if (n(m => m === 'karpit')) work.push({ id: 'w-karpit', text: `Kárpitos munka: ${n(m => m === 'karpit')} tétel árazása`, tab: 'bontas' });
+    work.push({ id: 'w-excel', text: 'Az előkészített munkafüzet letöltése és az árak beírása', hint: 'Jobb felső gomb: Munkafüzet letöltése (Excel).' });
+    const docs = st.tender ? st.tender.osszefoglalo.csatolando.map((x, i) => ({ id: 'd-' + i, text: x })) : [];
+    return { work, docs };
+  }
+  function todoHtml() {
+    const { work, docs } = todoList();
+    const row = t => `<label class="todo ${st.todo[t.id] ? 'done' : ''}"><input type="checkbox" data-todo="${t.id}" ${st.todo[t.id] ? 'checked' : ''}><span><span class="td-t">${esc(t.text)}</span>${t.hint ? `<span class="td-h">${esc(t.hint)}</span>` : ''}</span>${t.tab ? `<button class="btn btn-sm" data-tab="${t.tab}" style="--sec:${SEC[t.tab]}">Megnyitás</button>` : ''}</label>`;
+    const total = work.length + docs.length, done = [...work, ...docs].filter(t => st.todo[t.id]).length;
+    return `<h4 class="sec">Teendők ehhez az ajánlatkéréshez <span class="td-c">${done} / ${total} kész</span></h4>
+      <div class="grid g2"><div class="card"><div class="card-h"><h3>Munka</h3></div><div class="card-b todos">${work.map(row).join('')}</div></div>
+      <div class="card"><div class="card-h"><h3>Az ajánlathoz csatolandó dokumentumok</h3></div><div class="card-b todos">${docs.map(row).join('') || '<span class="muted">A dokumentum nem sorol fel csatolandó iratot.</span>'}</div></div></div>`;
+  }
   function viewBrief() {
     const el = $('#view-osszefoglalo');
     if (!st.tender) { el.innerHTML = st.tenderStatus === 'err' ? `<div class="card"><div class="card-b empty neg-t">${esc(st.tenderError)}</div></div>` : waiting('A vezetői összefoglaló'); return; }
@@ -250,12 +273,12 @@
         <ul><li>Az árakat nem tölti ki: az árazás az Önök szakértelme.</li><li>Az előkészített Excel letölthető, abban folytatható a munka.</li></ul>
         <button class="btn" data-tab="arazas">Árazás</button></div>
     </div>
+    ${todoHtml()}
     <h4 class="sec">A vezetésnek: feltételek és kockázatok a szerződésből</h4>`;
     h += `<div class="grid g-main"><div class="card"><div class="card-h"><h3>Feltételek, amelyek az árat és a kockázatot érintik</h3></div>
       <div class="tbl-wrap"><table><tbody>${o.feltetelek.map(f => `<tr><td class="k">${esc(f.nev)}</td><td>${esc(f.ertek)}${quoteSrc(f.idezet, 'dokumentum')}</td></tr>`).join('')}</tbody></table></div></div>
       <div><div class="card"><div class="card-h"><h3>Kockázatok</h3></div><div class="card-b risks">
-      ${o.kockazatok.map(k => `<div class="risk"><span class="badge ${SEV[k.sulyossag].cls}">${SEV[k.sulyossag].label}</span><div><b>${esc(k.cim)}</b><p>${esc(k.leiras)}</p>${quoteSrc(k.idezet, 'dokumentum')}</div></div>`).join('') || '<span class="muted">Nincs kiemelt kockázat.</span>'}</div></div>
-      <div class="card"><div class="card-h"><h3>Az ajánlathoz csatolandó</h3></div><div class="card-b"><ul class="chk">${o.csatolando.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div></div></div></div>`;
+      ${o.kockazatok.map(k => `<div class="risk"><span class="badge ${SEV[k.sulyossag].cls}">${SEV[k.sulyossag].label}</span><div><b>${esc(k.cim)}</b><p>${esc(k.leiras)}</p>${quoteSrc(k.idezet, 'dokumentum')}</div></div>`).join('') || '<span class="muted">Nincs kiemelt kockázat.</span>'}</div></div></div></div>`;
     el.innerHTML = h;
   }
 
@@ -630,9 +653,9 @@
     await setFile('sheet', await getFile(S.sheet[0], S.sheet[1]));
     await setFile('doc', await Promise.all(S.docs.map(d => getFile(d[0], d[1]))));
   }
-  function snapshot() { return { v: 1, savedAt: new Date().toISOString(), sample: st.sample, book: st.book, doc: st.doc, docs: st.docs, ai: st.ai, tender: st.tender, rev: st.rev, prices: st.prices, elapsedMs: st.elapsedMs, model: st.model }; }
+  function snapshot() { return { v: 1, savedAt: new Date().toISOString(), sample: st.sample, book: st.book, doc: st.doc, docs: st.docs, ai: st.ai, tender: st.tender, rev: st.rev, prices: st.prices, todo: st.todo, elapsedMs: st.elapsedMs, model: st.model }; }
   function restore(s) {
-    st = fresh(); Object.assign(st, { sample: s.sample || '', rev: s.rev || null, prices: s.prices || {}, book: s.book, doc: s.doc, ai: s.ai, tender: s.tender, elapsedMs: s.elapsedMs, model: s.model, fromSaved: true });
+    st = fresh(); Object.assign(st, { sample: s.sample || '', rev: s.rev || null, prices: s.prices || {}, todo: s.todo || {}, book: s.book, doc: s.doc, ai: s.ai, tender: s.tender, elapsedMs: s.elapsedMs, model: s.model, fromSaved: true });
     st.files = { sheet: { name: s.book.fileName }, doc: s.doc ? { name: s.doc.fileName } : null };
     st.docs = s.docs || (s.doc ? [s.doc] : []);
     st.docIndex = s.doc ? Parse.makeDocIndex(s.doc.text) : null;
@@ -640,7 +663,7 @@
     st.tab = 'osszefoglalo'; render();
   }
   root.App.snapshot = snapshot; root.App.rfqText = rfqText; root.App.questionsText = () => (st.tender ? questionsText() : '');
-  root.App.helpers = { items, makerOf, notesOf, dims, counts, earlierFlags, priceOf, NOTE_TYPES, SEV, FIND_TYPES, IMPACT };
+  root.App.helpers = { items, makerOf, notesOf, dims, counts, earlierFlags, priceOf, todoList, NOTE_TYPES, SEV, FIND_TYPES, IMPACT };
 
   /* ---------- események ---------- */
   const copy = (text, btn) => navigator.clipboard.writeText(text).then(() => { const t = btn.textContent; btn.textContent = 'Kimásolva'; setTimeout(() => { btn.textContent = t; }, 1500); });
@@ -666,6 +689,7 @@
     else if (t.id === 'f-part') { st.filter.part = t.value; render(); }
     else if (t.id === 'f-maker') { st.filter.maker = t.value; render(); }
     else if (t.id === 'f-notes') { st.filter.onlyNotes = t.checked; render(); }
+    else if (t.dataset.todo) { const y = window.scrollY; st.todo[t.dataset.todo] = t.checked; render(); window.scrollTo(0, y); }
     else if (t.dataset.price !== undefined || t.dataset.pm !== undefined) {
       const k = t.dataset.price !== undefined ? t.dataset.price : t.dataset.pm, v = Math.max(0, parseFloat(t.value) || 0);
       st.prices[k] = st.prices[k] || {};
