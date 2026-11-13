@@ -13,15 +13,15 @@ function guard(req, res) {
   return true;
 }
 
-async function gemini({ system, user, schema, maxOutputTokens = 32000, thinking }) {
+async function gemini({ system, user, parts, schema, json = true, maxOutputTokens = 32000, thinking }) {
   // A beállított modellnév tisztítása ("Gemini 2.5 Pro", "models/gemini-2.5-pro" is működjön); hibás névnél az alapértelmezett.
   const DEFAULT_MODEL = 'gemini-3.1-pro-preview';
   let model = String(process.env.GEMINI_MODEL || '').trim().toLowerCase().replace(/^models\//, '').replace(/\s+/g, '-');
   if (!/^gemini-[a-z0-9.-]+$/.test(model)) model = DEFAULT_MODEL;
   const body = {
     systemInstruction: { parts: [{ text: system }] },
-    contents: [{ role: 'user', parts: [{ text: user }] }],
-    generationConfig: { temperature: 0.1, maxOutputTokens, responseMimeType: 'application/json', responseSchema: schema }
+    contents: [{ role: 'user', parts: parts || [{ text: user }] }],
+    generationConfig: json ? { temperature: 0.1, maxOutputTokens, responseMimeType: 'application/json', responseSchema: schema } : { temperature: 0, maxOutputTokens }
   };
   // Gyorsabb válasz: a tételek értelmezéséhez elég az alacsony gondolkodási szint.
   if (thinking) body.generationConfig.thinkingConfig = { thinkingLevel: thinking };
@@ -46,7 +46,7 @@ async function gemini({ system, user, schema, maxOutputTokens = 32000, thinking 
       const cand = j.candidates && j.candidates[0];
       const out = cand && cand.content && cand.content.parts ? cand.content.parts.map(p => p.text || '').join('') : '';
       if (!out) throw Object.assign(new Error('Üres válasz a modelltől (' + ((cand && cand.finishReason) || 'ismeretlen ok') + ').'), { retry: true });
-      return { data: JSON.parse(out), model, usage: j.usageMetadata || null };
+      return { data: json ? JSON.parse(out) : out, model, usage: j.usageMetadata || null };
     } catch (e) {
       lastErr = e;
       if (e.retry === false || attempt === 2) break;

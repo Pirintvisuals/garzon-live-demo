@@ -36,7 +36,7 @@
   const fresh = () => ({
     tab: 'feltoltes', files: { sheet: null, doc: null }, book: null, doc: null, docIndex: null,
     ai: {}, tender: null, partStatus: {}, tenderStatus: 'idle', tenderError: '',
-    running: false, startedAt: 0, elapsedMs: 0, model: '', filter: { maker: '', part: '', onlyNotes: false }, fromSaved: false
+    docs: [], reading: '', running: false, startedAt: 0, elapsedMs: 0, model: '', filter: { maker: '', part: '', onlyNotes: false }, fromSaved: false
   });
   let st = fresh();
   root.App = { get state() { return st; }, MAKERS };
@@ -103,10 +103,11 @@
         <div class="drop-f">${f.sheet ? esc(f.sheet.name) : 'Húzza ide, vagy kattintson (.xls, .xlsx)'}</div>
         ${st.detecting ? '<div class="drop-s"><span class="spin"></span> A táblázat szerkezetének felismerése…</div>' : ''}
         ${st.book ? `<div class="drop-s">${st.book.sheetCount} munkalap, ebből ${c.parts} tartalmaz tételeket · ${c.items} tétel · ${esc(qtyText(items()))}</div>${st.book.usedAi ? colInfo() : ''}` : ''}</label>
-      <label class="drop ${f.doc ? 'has' : ''}" data-kind="doc"><input type="file" accept=".docx,.txt" hidden>
+      <label class="drop ${f.doc ? 'has' : ''}" data-kind="doc"><input type="file" accept=".pdf,.docx,.txt" multiple hidden>
         <div class="drop-t">2. Kiírás, műszaki leírás, szerződéstervezet</div>
-        <div class="drop-f">${f.doc ? esc(f.doc.name) : 'Húzza ide, vagy kattintson (.docx)'}</div>
-        ${st.doc ? `<div class="drop-s">${st.docIndex.paras.length.toLocaleString('hu-HU')} bekezdés · ${st.doc.text.length.toLocaleString('hu-HU')} karakter</div>` : ''}</label>
+        <div class="drop-f">${f.doc ? esc(f.doc.name) : 'Húzza ide, vagy kattintson (.pdf, .docx), több fájl is lehet'}</div>
+        ${st.reading ? `<div class="drop-s"><span class="spin"></span> ${esc(st.reading)}</div>` : ''}
+        ${st.doc ? `<div class="drop-s">${st.docs.length} dokumentum · ${st.docIndex.paras.length.toLocaleString('hu-HU')} bekezdés${st.docs.some(d => d.scanned) ? ' · szkennelt PDF szövegfelismeréssel' : ''}</div>` : ''}</label>
     </div>`;
     h += `<div class="card"><div class="card-b actions">
       <button class="btn btn-primary btn-lg" id="btn-run" ${st.book && !st.running ? '' : 'disabled'}>${st.running ? 'Feldolgozás folyamatban…' : (done() ? 'Feldolgozás újra' : 'Feldolgozás indítása')}</button>
@@ -151,7 +152,7 @@
     let where = '', ok = false, attr = '';
     if (source !== 'tetelegyzek' && st.docIndex) {
       const loc = Parse.locateQuote(st.docIndex, quote);
-      if (loc.found) { ok = true; where = loc.para ? `${esc(st.doc.fileName)}, ${loc.para}. bekezdés` : esc(st.doc.fileName); if (loc.para) attr = `data-para="${loc.para}"`; }
+      if (loc.found) { ok = true; where = loc.para ? esc(paraLabel(loc.para)) : esc(st.doc.fileName); if (loc.para) attr = `data-para="${loc.para}"`; }
     }
     if (!ok) {
       const hit = (relatedIds && relatedIds.length ? relatedIds.map(itemById).filter(Boolean) : items()).find(it => Parse.quoteInItem(it, quote));
@@ -182,6 +183,11 @@
   }
 
   /* ---------- forrásnézet: az idézet a saját helyén, a környezetével ---------- */
+  // Egy bekezdés helye: fájlnév és oldalszám (PDF), vagy bekezdésszám.
+  function paraLabel(n) {
+    const m = (st.docIndex.meta && st.docIndex.meta[n - 1]) || {};
+    return (m.file || st.doc.fileName) + ', ' + (m.page ? m.page + '. oldal' : n + '. bekezdés');
+  }
   function mark(text, quote) {
     const i = text.toLowerCase().indexOf(String(quote || '').toLowerCase().trim());
     if (i < 0 || !quote) return `<mark>${esc(text)}</mark>`;
@@ -191,7 +197,7 @@
     let title = '', body = '';
     if (d.para) {
       const n = Number(d.para), P = st.docIndex.paras;
-      title = `${esc(st.doc.fileName)} · ${n}. bekezdés`;
+      title = esc(paraLabel(n).replace(', ', ' · '));
       for (let i = Math.max(1, n - 2); i <= Math.min(P.length, n + 2); i++)
         body += `<p class="${i === n ? 'hit' : 'ctx'}"><span class="pn">${i}.</span>${i === n ? mark(P[i - 1], d.quote) : esc(P[i - 1])}</p>`;
     } else if (d.item) {
@@ -368,20 +374,33 @@
         st.ai = {}; st.tender = null; st.partStatus = {}; st.tenderStatus = 'idle'; st.elapsedMs = 0;
         if (!st.book.items.length) { alert('Ebben a táblázatban nem találtam tételjegyzéket.' + (st.book.aiError ? ' (' + st.book.aiError + ')' : '')); st.book = null; st.files.sheet = null; }
       } else {
-        st.doc = await Parse.readDocument(file); st.files.doc = file; st.docIndex = Parse.makeDocIndex(st.doc.text);
+        const list = Array.isArray(file) ? file : [file];
+        for (const f of list) {
+          st.reading = 'Olvasás: ' + f.name; render();
+          const d = await Parse.readDocument(f, async p => { st.reading = 'Szkennelt PDF, szövegfelismerés: ' + f.name + ' (1-2 perc)'; render(); return api('ocr', p); });
+          st.docs = st.docs.filter(x => x.fileName !== d.fileName).concat(d);
+        }
+        setDocs(st.docs);
       }
-    } catch (e) { alert(e.message); }
+    } catch (e) { st.reading = ''; alert(e.message); }
     render();
+  }
+  function setDocs(docs) {
+    st.docs = docs; st.reading = '';
+    if (!docs.length) { st.doc = null; st.docIndex = null; st.files.doc = null; return; }
+    st.doc = { fileName: docs.map(d => d.fileName).join(' + '), text: Parse.combineDocs(docs) };
+    st.files.doc = { name: st.doc.fileName }; st.docIndex = Parse.makeDocIndex(st.doc.text);
   }
   async function loadSample() {
     const get = async (url, name) => new File([await (await fetch(url)).blob()], name);
     await setFile('sheet', await get('minta/debrecen_artablazatok.xls', 'Ártáblázatok_1_10.xls'));
     await setFile('doc', await get('minta/debrecen_kozbeszerzesi_dok.docx', 'Közbeszerzési dok_1_10.docx'));
   }
-  function snapshot() { return { v: 1, savedAt: new Date().toISOString(), book: st.book, doc: st.doc, ai: st.ai, tender: st.tender, elapsedMs: st.elapsedMs, model: st.model }; }
+  function snapshot() { return { v: 1, savedAt: new Date().toISOString(), book: st.book, doc: st.doc, docs: st.docs, ai: st.ai, tender: st.tender, elapsedMs: st.elapsedMs, model: st.model }; }
   function restore(s) {
     st = fresh(); Object.assign(st, { book: s.book, doc: s.doc, ai: s.ai, tender: s.tender, elapsedMs: s.elapsedMs, model: s.model, fromSaved: true });
     st.files = { sheet: { name: s.book.fileName }, doc: s.doc ? { name: s.doc.fileName } : null };
+    st.docs = s.docs || (s.doc ? [s.doc] : []);
     st.docIndex = s.doc ? Parse.makeDocIndex(s.doc.text) : null;
     st.book.parts.forEach(p => { st.partStatus[p.no] = 'ok'; }); st.tenderStatus = s.tender ? 'ok' : 'idle';
     st.tab = 'osszefoglalo'; render();
@@ -405,7 +424,7 @@
   });
   document.addEventListener('change', e => {
     const t = e.target;
-    if (t.type === 'file' && t.files[0]) setFile(t.closest('.drop').dataset.kind, t.files[0]);
+    if (t.type === 'file' && t.files[0]) { const k = t.closest('.drop').dataset.kind; setFile(k, k === 'doc' ? [...t.files] : t.files[0]); }
     else if (t.dataset.maker) { st.ai[t.dataset.maker].gyarto = t.value; st.ai[t.dataset.maker].gyarto_indok = 'Kézzel átállítva.'; render(); }
     else if (t.id === 'f-part') { st.filter.part = t.value; render(); }
     else if (t.id === 'f-maker') { st.filter.maker = t.value; render(); }
@@ -414,7 +433,7 @@
   ['dragover', 'drop'].forEach(ev => document.addEventListener(ev, e => {
     const d = e.target.closest && e.target.closest('.drop'); if (!d) return;
     e.preventDefault();
-    if (ev === 'drop' && e.dataTransfer.files[0]) setFile(d.dataset.kind, e.dataTransfer.files[0]);
+    if (ev === 'drop' && e.dataTransfer.files[0]) setFile(d.dataset.kind, d.dataset.kind === 'doc' ? [...e.dataTransfer.files] : e.dataTransfer.files[0]);
   }));
   // Ctrl+Shift+S: a feldolgozott eredmény mentése JSON-ba (ebből lesz a data/mentett.json tartalék).
   document.addEventListener('keydown', e => {

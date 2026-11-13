@@ -96,7 +96,41 @@
     return { fileName, parts, items: parts.flatMap(p => p.items), skipped, sheetCount: wb.SheetNames.length, usedAi, aiError };
   }
 
-  async function readDocument(file) {
+  const PAGE = n => '##### OLDAL ' + n + ' #####';
+  const toBase64 = buf => { let b = ''; const u = new Uint8Array(buf); for (let i = 0; i < u.length; i += 0x8000) b += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(b); };
+
+  // PDF szövegrétegének kiolvasása oldalanként, soronként.
+  async function pdfText(buf) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const pdf = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
+    let text = '', chars = 0;
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const tc = await (await pdf.getPage(n)).getTextContent();
+      let page = '', lastY = null;
+      for (const it of tc.items) {
+        const y = it.transform ? Math.round(it.transform[5]) : lastY;
+        if (lastY !== null && Math.abs(y - lastY) > 2) page += '\n';
+        page += it.str; if (it.hasEOL) page += '\n';
+        lastY = y;
+      }
+      // A sorokat bekezdésekké fűzzük: új bekezdés üres sornál, vagy ha az előző sor mondatvéggel zárul.
+      const paras = []; let cur = '';
+      for (const line of page.split('\n').map(l => l.replace(/\s+/g, ' ').trim())) {
+        if (!line) { if (cur) { paras.push(cur); cur = ''; } continue; }
+        cur = cur ? cur + ' ' + line : line;
+        if (/[.:;!?]$/.test(line)) { paras.push(cur); cur = ''; }
+      }
+      if (cur) paras.push(cur);
+      chars += paras.join('').length;
+      text += PAGE(n) + '\n' + paras.join('\n') + '\n';
+    }
+    return { text, pages: pdf.numPages, chars };
+  }
+
+  /*
+   * Szöveges dokumentum beolvasása: .docx, .txt, .pdf. Szkennelt PDF-nél (nincs szövegréteg) az `ocr` függvény írja át.
+   */
+  async function readDocument(file, ocr) {
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     const buf = await file.arrayBuffer();
     if (ext === 'docx') {
@@ -104,8 +138,19 @@
       return { fileName: file.name, text: out.value };
     }
     if (ext === 'txt') return { fileName: file.name, text: new TextDecoder('utf-8').decode(buf) };
-    throw new Error('A szöveges dokumentumot egyelőre .docx vagy .txt formátumban tudom olvasni (' + file.name + ').');
+    if (ext === 'pdf') {
+      const t = await pdfText(buf);
+      if (t.chars >= 150 * t.pages) return { fileName: file.name, text: t.text, pages: t.pages };
+      if (!ocr) throw new Error('Szkennelt PDF, a szövegfelismerés nem érhető el (' + file.name + ').');
+      const out = await ocr({ name: file.name, data: toBase64(buf) });
+      return { fileName: file.name, text: out.text, pages: t.pages, scanned: true };
+    }
+    throw new Error('A dokumentumot .pdf, .docx vagy .txt formátumban tudom olvasni (' + file.name + ').');
   }
+
+  // Több dokumentum egy szöveggé fűzve, fájljelölő sorokkal.
+  const FILE = name => '##### FÁJL: ' + name + ' #####';
+  const combineDocs = docs => docs.map(d => FILE(d.fileName) + '\n' + d.text).join('\n');
 
   /* Idézet-ellenőrzés: a modell által adott idézetet megkeressük a forrásszövegben. */
   const norm = s => String(s || '').toLowerCase().replace(/[„”"'’‘`´]/g, '').replace(/\s+/g, ' ').trim();
@@ -114,8 +159,15 @@
   const loose = s => norm(s).replace(/\[[^\]]*\]/g, ' ').replace(/[*]/g, ' ').replace(/[^a-z0-9áéíóöőúüű%]+/g, ' ').trim();
 
   function makeDocIndex(text) {
-    const paras = String(text || '').split(/\r?\n/).map(clean).filter(Boolean);
-    return { paras, normParas: paras.map(norm), looseParas: paras.map(loose), normAll: norm(paras.join(' ')) };
+    const paras = [], meta = [];
+    let file = '', page = 0;
+    for (const raw of String(text || '').split(/\r?\n/)) {
+      const line = clean(raw); if (!line) continue;
+      let m = line.match(/^#{3,}\s*FÁJL:\s*(.+?)\s*#{3,}$/); if (m) { file = m[1]; page = 0; continue; }
+      m = line.match(/^#{3,}\s*OLDAL\s*(\d+)\s*#{3,}$/); if (m) { page = Number(m[1]); continue; }
+      paras.push(line); meta.push({ file, page });
+    }
+    return { paras, meta, normParas: paras.map(norm), looseParas: paras.map(loose), normAll: norm(paras.join(' ')) };
   }
 
   function locateQuote(index, quote) {
@@ -143,5 +195,5 @@
     return sq.length > 0 && sq.every(f => sh.includes(f));
   };
 
-  root.Parse = { readWorkbook, readDocument, makeDocIndex, locateQuote, quoteInItem, clean };
+  root.Parse = { readWorkbook, readDocument, combineDocs, makeDocIndex, locateQuote, quoteInItem, clean };
 })(window);
