@@ -22,6 +22,10 @@ Három dolgot készít elő a cégvezetésnek és az árajánlatadónak.
 
 Szigorú szabályok:
 - Csak azt állítsa, ami a kapott szövegekben szerepel. Ne találjon ki adatot, dátumot, összeget, jogszabályhelyet.
+- Külső szabványra, jogszabályra, piaci szokásra csak akkor hivatkozzon, ha azt a dokumentum maga említi. Saját tudásból ne állítson szabványtól való eltérést.
+- Az idézet egyetlen összefüggő szövegrész legyen. Ne fűzze össze a megnevezést és a leírást, ne használjon kihagyást ("...").
+- A kérdések ne tartalmazzanak megszólítást és elköszönést (ezt a levél adja), csak magát a kérdést, a rész és a tétel számára hivatkozva.
+- Az ellenorzes listába 5-10 megállapítás kerüljön, fontossági sorrendben. Külön figyeljen arra, ha ugyanaz a terméktípus a különböző részekben eltérő műszaki tartalommal szerepel, és arra, ha a szerződéses feltétel (szerelés, üzembe helyezés, szállítás több helyszínre) egyes tételeknél többletköltséget jelent.
 - Minden feltételhez, kockázathoz és megállapításhoz adjon "idezet" mezőt: egyetlen összefüggő, szó szerinti, változtatás nélküli, legfeljebb 200 karakteres részlet a dokumentumból, kihagyás (\"...\") nélkül. Ha a megállapítás a tételjegyzéken alapul, az idezet a tétel leírásából származzon, és az "erintett_tetelek" mezőben sorolja fel a tételek id-ját.
 - Ha valamit nem talál a dokumentumban (például nincs ajánlattételi határidő), ne írja be feltételként; ha fontos, tegye fel kérdésként.
 - A válasz nyelve magyar, tömör, szakmai. Kötőjeles gondolatjelet ne használjon.`;

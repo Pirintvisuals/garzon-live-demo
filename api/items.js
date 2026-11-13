@@ -24,7 +24,8 @@ Szabályok:
   "hiany" = árazáshoz szükséges adat hiányzik (méret, anyag, vastagság, szín, mennyiségi egység).
   "pontatlan" = elírás, értelmezhetetlen vagy kétértelmű megfogalmazás.
   Minden észrevételhez adjon "idezet" mezőt: egyetlen összefüggő, szó szerinti, változtatás nélküli részlet a tétel szövegéből (legfeljebb 120 karakter). Kihagyást ("...", "[...]") ne használjon, két külön szövegrészt ne fűzzön össze. Hiány esetén az idezet lehet üres.
-- Egy tételhez legfeljebb 3 észrevétel, a legfontosabbak. A méret megjegyzésbe ne ismételje meg az észrevételt.
+- Egy tételhez legfeljebb 2 észrevétel, csak az, ami nélkül az árajánlatadó nem tud felelősen árazni, vagy ami félreértéshez vezethet.
+- NEM észrevétel: iskolabútornál a korcsoport megadása a méretet helyettesíti (ne jelezze hiányként a szék vagy asztal méretét, ha korcsoport szerepel); az állítható méret (tartomány) nem pontatlanság; kereskedelmi terméknél (beszállítói) a részletes szerkezeti adat hiánya nem gond. A méret megjegyzésbe ne ismételje meg az észrevételt.
 - Ha a tétel leírása rendben van, az eszrevetelek üres tömb.
 - A válasz nyelve magyar. Minden kapott tételhez pontosan egy elemet adjon vissza, ugyanazzal az id-val.`;
 

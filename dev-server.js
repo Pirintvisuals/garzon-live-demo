@@ -25,6 +25,14 @@ http.createServer(async (req, res) => {
   res.status = c => { res.statusCode = c; return res; };
   res.json = o => { res.setHeader('content-type', 'application/json; charset=utf-8'); res.end(JSON.stringify(o)); };
 
+  // Csak helyben: a feldolgozott eredmény mentése tartaléknak (data/mentett.json).
+  if (url.pathname === '/__save' && req.method === 'POST') {
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => { fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true }); fs.writeFileSync(path.join(ROOT, 'data', 'mentett.json'), Buffer.concat(chunks)); res.json({ ok: true }); });
+    return;
+  }
+
   if (url.pathname.startsWith('/api/')) {
     const name = url.pathname.slice(5).replace(/[^a-z0-9-]/gi, '');
     const file = path.join(ROOT, 'api', name + '.js');

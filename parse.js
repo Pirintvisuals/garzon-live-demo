@@ -94,7 +94,12 @@
     return { found: index.normAll.includes(q) };
   }
 
-  const quoteInItem = (item, quote) => { const q = norm(quote); return !!q && norm(item.name + ' ' + item.spec).includes(q); };
+  // A modell néha kihagyással ("...") vagy a megnevezést és a leírást összefűzve idéz: ilyenkor a darabokat külön keressük.
+  const fragments = quote => String(quote || '').split(/\s*(?:\.{3,}|…|\[\.{3}\]|\s-\s)\s*/).map(norm).filter(f => f.length >= 6);
+  const quoteInItem = (item, quote) => {
+    const hay = norm(item.name + ' ' + item.spec), fr = fragments(quote);
+    return fr.length > 0 && fr.every(f => hay.includes(f));
+  };
 
   root.Parse = { readWorkbook, readDocument, makeDocIndex, locateQuote, quoteInItem, clean };
 })(window);

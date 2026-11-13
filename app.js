@@ -140,16 +140,18 @@
   /* ---------- Vezetői összefoglaló ---------- */
   function quoteSrc(quote, source, relatedIds) {
     if (!quote) return '';
-    let where = '', ok = false;
+    let where = '', ok = false, attr = '';
     if (source !== 'tetelegyzek' && st.docIndex) {
       const loc = Parse.locateQuote(st.docIndex, quote);
-      if (loc.found) { ok = true; where = loc.para ? `${esc(st.doc.fileName)}, ${loc.para}. bekezdés` : esc(st.doc.fileName); }
+      if (loc.found) { ok = true; where = loc.para ? `${esc(st.doc.fileName)}, ${loc.para}. bekezdés` : esc(st.doc.fileName); if (loc.para) attr = `data-para="${loc.para}"`; }
     }
     if (!ok) {
       const hit = (relatedIds && relatedIds.length ? relatedIds.map(itemById).filter(Boolean) : items()).find(it => Parse.quoteInItem(it, quote));
-      if (hit) { ok = true; where = `${esc(hit.sheet)} munkalap, ${hit.row}. sor (tétel ${esc(hit.id)})`; }
+      if (hit) { ok = true; where = `${esc(hit.sheet)} munkalap, ${hit.row}. sor (tétel ${esc(hit.id)})`; attr = `data-item="${esc(hit.id)}"`; }
     }
-    return `<div class="quote ${ok ? '' : 'unv'}"><span class="q-text">„${esc(quote)}”</span><span class="q-src">${ok ? 'Forrás: ' + where : 'Az idézet szó szerint nem található a forrásban, kérjük ellenőrizze.'}</span></div>`;
+    return `<div class="quote ${ok ? '' : 'unv'}"><span class="q-text">„${esc(quote)}”</span>${ok
+      ? `<button class="q-src q-open" ${attr} data-quote="${esc(quote)}" title="Megnyitás a forrásban">Forrás: ${where} ›</button>`
+      : '<span class="q-src">Az idézet szó szerint nem található a forrásban, kérjük ellenőrizze.</span>'}</div>`;
   }
   function viewBrief() {
     const el = $('#view-osszefoglalo');
@@ -169,6 +171,30 @@
       ${o.kockazatok.map(k => `<div class="risk"><span class="badge ${SEV[k.sulyossag].cls}">${SEV[k.sulyossag].label}</span><div><b>${esc(k.cim)}</b><p>${esc(k.leiras)}</p>${quoteSrc(k.idezet, 'dokumentum')}</div></div>`).join('') || '<span class="muted">Nincs kiemelt kockázat.</span>'}</div></div>
       <div class="card"><div class="card-h"><h3>Az ajánlathoz csatolandó</h3></div><div class="card-b"><ul class="chk">${o.csatolando.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div></div></div></div>`;
     el.innerHTML = h;
+  }
+
+  /* ---------- forrásnézet: az idézet a saját helyén, a környezetével ---------- */
+  function mark(text, quote) {
+    const i = text.toLowerCase().indexOf(String(quote || '').toLowerCase().trim());
+    if (i < 0 || !quote) return `<mark>${esc(text)}</mark>`;
+    return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + quote.trim().length)) + '</mark>' + esc(text.slice(i + quote.trim().length));
+  }
+  function openSource(d) {
+    let title = '', body = '';
+    if (d.para) {
+      const n = Number(d.para), P = st.docIndex.paras;
+      title = `${esc(st.doc.fileName)} · ${n}. bekezdés`;
+      for (let i = Math.max(1, n - 2); i <= Math.min(P.length, n + 2); i++)
+        body += `<p class="${i === n ? 'hit' : 'ctx'}"><span class="pn">${i}.</span>${i === n ? mark(P[i - 1], d.quote) : esc(P[i - 1])}</p>`;
+    } else if (d.item) {
+      const it = itemById(d.item); if (!it) return;
+      title = `${esc(st.book.fileName)} · ${esc(it.sheet)} munkalap · ${it.row}. sor`;
+      body = `<table class="compact"><thead><tr><th>Ssz.</th><th>Megnevezés</th><th>Leírás</th><th class="num">Mennyiség</th></tr></thead><tbody><tr><td>${esc(it.no)}</td><td>${mark(it.name, d.quote).replace(/^<mark>(.*)<\/mark>$/, '$1')}</td><td>${mark(it.spec, d.quote).replace(/^<mark>(.*)<\/mark>$/, '$1')}</td><td class="num">${fmt(it.qty)} ${esc(it.unit)}</td></tr></tbody></table>`;
+    } else return;
+    const m = document.createElement('div');
+    m.className = 'modal'; m.innerHTML = `<div class="modal-box"><div class="modal-h"><h3>${title}</h3><button class="btn btn-sm" data-close>Bezárás</button></div><div class="modal-b">${body}</div><div class="modal-f">Ez a feltöltött fájl eredeti szövege, változtatás nélkül.</div></div>`;
+    m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-close]')) m.remove(); });
+    document.body.appendChild(m);
   }
 
   /* ---------- Tételek ---------- */
@@ -253,6 +279,7 @@
   }
 
   /* ---------- Kérdések ---------- */
+  const cleanQ = s => String(s || '').replace(/^\s*Tisztelt\s+[^!,.]{0,40}[!,.]\s*/i, '');
   function questionsText() {
     const o = st.tender.osszefoglalo;
     return `Tisztelt Ajánlatkérő!\n\nA(z) „${o.targy}” tárgyú eljárásban az alábbi kiegészítő tájékoztatást kérjük:\n\n` +
@@ -262,7 +289,7 @@
     const el = $('#view-kerdesek');
     if (!st.tender) { el.innerHTML = waiting('A kérdéslista'); return; }
     let h = `<div class="view-head"><div><h2>Kérdések az ajánlatkérőnek</h2><p>Kiegészítő tájékoztatás-kérés vázlata. Küldés előtt az árajánlatadó átnézi és szerkeszti.</p></div><button class="btn btn-primary" id="btn-copy-q">Levél szövegének másolása</button></div>`;
-    h += `<div class="grid g-main"><div class="card"><div class="card-b qs">${st.tender.kerdesek.map((q, n) => `<div class="q"><span class="q-n">${n + 1}.</span><div><p class="q-k">${esc(q.kerdes)}</p><p class="muted small">Miért kell: ${esc(q.miert)}${q.erintett_tetelek.length ? ' · Tételek: ' + q.erintett_tetelek.map(esc).join(', ') : ''}</p></div></div>`).join('')}</div></div>
+    h += `<div class="grid g-main"><div class="card"><div class="card-b qs">${st.tender.kerdesek.map((q, n) => `<div class="q"><span class="q-n">${n + 1}.</span><div><p class="q-k">${esc(cleanQ(q.kerdes))}</p><p class="muted small">Miért kell: ${esc(q.miert)}${q.erintett_tetelek.length ? ' · Tételek: ' + q.erintett_tetelek.map(esc).join(', ') : ''}</p></div></div>`).join('')}</div></div>
       <div class="card"><div class="card-h"><h3>Levél vázlata</h3></div><div class="card-b"><pre class="mail-pre">${esc(questionsText())}</pre></div></div></div>`;
     el.innerHTML = h;
   }
@@ -358,6 +385,7 @@
   document.addEventListener('click', e => {
     const t = e.target.closest('button'); if (!t) return;
     if (t.dataset.tab) { st.tab = t.dataset.tab; render(); window.scrollTo(0, 0); }
+    else if (t.classList.contains('q-open')) openSource(t.dataset);
     else if (t.id === 'btn-run') run();
     else if (t.id === 'btn-sample') loadSample();
     else if (t.id === 'btn-saved') fetch('data/mentett.json').then(r => r.json()).then(restore).catch(() => alert('A mentett eredmény nem tölthető be.'));
