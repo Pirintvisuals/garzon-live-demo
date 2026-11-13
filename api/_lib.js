@@ -7,8 +7,9 @@ const API = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 function guard(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Csak POST kérés.' }); return false; }
-  const pw = process.env.DEMO_PASSWORD;
-  if (pw && req.headers['x-demo-key'] !== pw) { res.status(401).json({ error: 'Hibás jelszó.' }); return false; }
+  // Jelszó nincs. Csak a saját oldalról érkező kérést szolgáljuk ki; a költség felső korlátja a Google AI Studio keret.
+  const from = String(req.headers.origin || req.headers.referer || ''), host = String(req.headers.host || '');
+  if (from && host && !from.includes(host)) { res.status(403).json({ error: 'Csak az alkalmazás saját oldaláról használható.' }); return false; }
   if (!process.env.GEMINI_API_KEY) { res.status(500).json({ error: 'Nincs beállítva a GEMINI_API_KEY környezeti változó.' }); return false; }
   return true;
 }
