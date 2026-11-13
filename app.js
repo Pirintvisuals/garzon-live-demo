@@ -377,7 +377,7 @@
         const list = Array.isArray(file) ? file : [file];
         for (const f of list) {
           st.reading = 'Olvasás: ' + f.name; render();
-          const d = await Parse.readDocument(f, async p => { st.reading = 'Szkennelt PDF, szövegfelismerés: ' + f.name + ' (1-2 perc)'; render(); return api('ocr', p); });
+          const d = await Parse.readDocument(f, p => api('ocr', p), (done, all) => { st.reading = 'Szkennelt PDF, szövegfelismerés: ' + f.name + ' (' + done + ' / ' + all + ' oldal)'; render(); });
           st.docs = st.docs.filter(x => x.fileName !== d.fileName).concat(d);
         }
         setDocs(st.docs);

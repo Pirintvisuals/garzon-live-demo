@@ -36,7 +36,8 @@
 
   // Tételek kiolvasása egy munkalapról a megadott oszlopkiosztással. A leírás több oszlopból is összeállhat.
   function extract(rows, hr, col, sheetName, partNo) {
-    const header = (rows[hr] || []).map(clean);
+    // Oszlopcímke a leíráshoz: a fejléc első sora, zárójel és magyarázat nélkül (a kiírások fejléce gyakran egész bekezdés).
+    const header = (rows[hr] || []).map(h => clean(String(h == null ? '' : h).split(/\r?\n/)[0].split(' (')[0].split(':')[0]).slice(0, 30));
     const specCols = (col.specs || []).filter(c => c >= 0 && c !== col.name && c !== col.qty && c !== col.unit && c !== col.no);
     const items = [];
     for (let r = hr + 1; r < rows.length; r++) {
@@ -124,13 +125,40 @@
       chars += paras.join('').length;
       text += PAGE(n) + '\n' + paras.join('\n') + '\n';
     }
-    return { text, pages: pdf.numPages, chars };
+    return { text, pages: pdf.numPages, chars, pdf };
+  }
+
+  // Szkennelt PDF: az oldalakat képpé rajzoljuk, és 3 oldalas adagokban, párhuzamosan íratjuk át.
+  async function pdfOcr(pdf, ocr, onProgress) {
+    const images = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      const base = page.getViewport({ scale: 1 });
+      const vp = page.getViewport({ scale: Math.min(2.2, 1500 / base.width) });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      images.push({ n, data: canvas.toDataURL('image/jpeg', 0.72).split(',')[1] });
+      canvas.width = canvas.height = 0;
+    }
+    const batches = [];
+    for (let i = 0; i < images.length; i += 3) batches.push(images.slice(i, i + 3));
+    const out = new Array(batches.length); let done = 0, next = 0;
+    const worker = async () => {
+      while (next < batches.length) {
+        const k = next++;
+        out[k] = (await ocr({ pages: batches[k] })).text;
+        done += batches[k].length; if (onProgress) onProgress(done, images.length);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(8, batches.length) }, worker));
+    return out.join('\n');
   }
 
   /*
    * Szöveges dokumentum beolvasása: .docx, .txt, .pdf. Szkennelt PDF-nél (nincs szövegréteg) az `ocr` függvény írja át.
    */
-  async function readDocument(file, ocr) {
+  async function readDocument(file, ocr, onProgress) {
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     const buf = await file.arrayBuffer();
     if (ext === 'docx') {
@@ -141,9 +169,9 @@
     if (ext === 'pdf') {
       const t = await pdfText(buf);
       if (t.chars >= 150 * t.pages) return { fileName: file.name, text: t.text, pages: t.pages };
+      if (onProgress) onProgress(0, t.pages);
       if (!ocr) throw new Error('Szkennelt PDF, a szövegfelismerés nem érhető el (' + file.name + ').');
-      const out = await ocr({ name: file.name, data: toBase64(buf) });
-      return { fileName: file.name, text: out.text, pages: t.pages, scanned: true };
+      return { fileName: file.name, text: await pdfOcr(t.pdf, ocr, onProgress), pages: t.pages, scanned: true };
     }
     throw new Error('A dokumentumot .pdf, .docx vagy .txt formátumban tudom olvasni (' + file.name + ').');
   }
