@@ -14,7 +14,10 @@ function guard(req, res) {
 }
 
 async function gemini({ system, user, schema, maxOutputTokens = 32000 }) {
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-pro';
+  // A beállított modellnév tisztítása ("Gemini 2.5 Pro", "models/gemini-2.5-pro" is működjön); hibás névnél az alapértelmezett.
+  const DEFAULT_MODEL = 'gemini-2.5-pro';
+  let model = String(process.env.GEMINI_MODEL || '').trim().toLowerCase().replace(/^models\//, '').replace(/\s+/g, '-');
+  if (!/^gemini-[a-z0-9.-]+$/.test(model)) model = DEFAULT_MODEL;
   const body = {
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: 'user', parts: [{ text: user }] }],
@@ -30,7 +33,9 @@ async function gemini({ system, user, schema, maxOutputTokens = 32000 }) {
       });
       const txt = await r.text();
       if (!r.ok) {
-        const err = new Error('Gemini hiba ' + r.status + ': ' + txt.slice(0, 400));
+        // Ismeretlen modellnévnél egyszer újrapróbáljuk az alapértelmezettel.
+        if ((r.status === 404 || r.status === 400) && model !== DEFAULT_MODEL && /model/i.test(txt)) { model = DEFAULT_MODEL; attempt--; continue; }
+        const err = new Error('Gemini hiba ' + r.status + ' (' + model + '): ' + txt.slice(0, 400));
         err.retry = r.status === 429 || r.status >= 500;
         throw err;
       }

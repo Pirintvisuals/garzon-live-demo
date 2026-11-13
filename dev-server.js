@@ -32,6 +32,13 @@ http.createServer(async (req, res) => {
     let raw = '';
     req.on('data', c => { raw += c; });
     req.on('end', async () => {
+      // Helyi kulcs nélkül a kérést az élő telepítés szolgálja ki (a jelszót a böngésző küldi).
+      if (!process.env.GEMINI_API_KEY) {
+        try {
+          const r = await fetch((process.env.REMOTE_API || 'https://garzon-live-demo.vercel.app') + '/api/' + name, { method: 'POST', headers: { 'content-type': 'application/json', 'x-demo-key': req.headers['x-demo-key'] || '' }, body: raw });
+          res.statusCode = r.status; res.setHeader('content-type', 'application/json; charset=utf-8'); return res.end(await r.text());
+        } catch (e) { return res.status(502).json({ error: 'Az élő szerver nem érhető el: ' + e.message }); }
+      }
       try { req.body = raw ? JSON.parse(raw) : {}; } catch (e) { return res.status(400).json({ error: 'Hibás JSON.' }); }
       try { delete require.cache[require.resolve(file)]; await require(file)(req, res); }
       catch (e) { console.error(e); if (!res.writableEnded) res.status(500).json({ error: String(e.message || e) }); }
