@@ -32,35 +32,68 @@
     return isFinite(n) ? n : NaN;
   }
 
-  function readWorkbook(buf, fileName) {
+  const rowHasText = row => (row || []).some(c => clean(c) !== '');
+
+  // Tételek kiolvasása egy munkalapról a megadott oszlopkiosztással. A leírás több oszlopból is összeállhat.
+  function extract(rows, hr, col, sheetName, partNo) {
+    const header = (rows[hr] || []).map(clean);
+    const specCols = (col.specs || []).filter(c => c >= 0 && c !== col.name && c !== col.qty && c !== col.unit && c !== col.no);
+    const items = [];
+    for (let r = hr + 1; r < rows.length; r++) {
+      const row = rows[r] || [];
+      const name = clean(row[col.name]);
+      const qty = parseQty(row[col.qty]);
+      if (!name || !(qty > 0)) continue;
+      if (/^(összesen|mindösszesen|részösszeg|összeg)/i.test(name)) continue;
+      const no = col.no >= 0 ? clean(row[col.no]).replace(/\.$/, '') : '';
+      const spec = specCols.length === 1 ? clean(row[specCols[0]])
+        : specCols.map(c => { const v = clean(row[c]); return v ? (header[c] ? header[c] + ': ' : '') + v : ''; }).filter(Boolean).join('; ');
+      items.push({
+        id: partNo + '/' + (no || items.length + 1),
+        partNo, part: clean(sheetName), sheet: sheetName, row: r + 1, no: no || String(items.length + 1),
+        name, spec, qty, unit: col.unit >= 0 ? clean(row[col.unit]) : ''
+      });
+    }
+    // Azonos kód kétszer: a sorszámmal tesszük egyedivé.
+    const seen = {};
+    items.forEach(it => { if (seen[it.id]) it.id = it.id + '#' + it.row; seen[it.id] = true; });
+    return items;
+  }
+
+  /*
+   * Munkafüzet beolvasása. Először szabály alapján keressük a fejlécet; ahol ez nem sikerül,
+   * a `detect` függvény (mesterséges intelligencia) megmondja az oszlopkiosztást. A tételeket mindig a kód olvassa ki.
+   */
+  async function readWorkbook(buf, fileName, detect) {
     const wb = XLSX.read(buf, { type: 'array', codepage: 1250 });
-    const parts = [];
-    const skipped = [];
-    wb.SheetNames.forEach((sheetName, si) => {
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '', blankrows: true });
-      const hr = findHeader(rows);
-      if (hr < 0) { skipped.push(sheetName); return; }
-      const col = mapColumns(rows[hr]);
-      if (col.name < 0 || col.qty < 0) { skipped.push(sheetName); return; }
-      const partNo = parts.length + 1;
-      const items = [];
-      for (let r = hr + 1; r < rows.length; r++) {
-        const row = rows[r] || [];
-        const name = clean(row[col.name]);
-        const qty = parseQty(row[col.qty]);
-        if (!name || !(qty > 0)) continue;
-        const no = col.no >= 0 ? clean(row[col.no]).replace(/\.$/, '') : '';
-        items.push({
-          id: partNo + '/' + (no || items.length + 1),
-          partNo, part: clean(sheetName), sheet: sheetName, row: r + 1, no: no || String(items.length + 1),
-          name, spec: col.spec >= 0 ? clean(row[col.spec]) : '',
-          qty, unit: col.unit >= 0 ? clean(row[col.unit]) : ''
-        });
-      }
-      if (items.length) parts.push({ no: partNo, name: clean(sheetName), sheet: sheetName, items });
-      else skipped.push(sheetName);
+    const sheets = wb.SheetNames.map(name => ({ name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', blankrows: true }) }));
+    const plan = sheets.map(sh => {
+      const hr = findHeader(sh.rows);
+      if (hr < 0) return null;
+      const c = mapColumns(sh.rows[hr]);
+      return c.name >= 0 && c.qty >= 0 ? { hr, col: { no: c.no, name: c.name, qty: c.qty, unit: c.unit, specs: c.spec >= 0 ? [c.spec] : [] } } : null;
     });
-    return { fileName, parts, items: parts.flatMap(p => p.items), skipped, sheetCount: wb.SheetNames.length };
+    let usedAi = false, aiError = '';
+    const unknown = sheets.map((sh, i) => i).filter(i => !plan[i] && sheets[i].rows.filter(rowHasText).length >= 3);
+    if (unknown.length && detect) {
+      try {
+        const payload = unknown.map(i => ({ name: sheets[i].name, rows: sheets[i].rows.slice(0, 40).map(r => (r || []).slice(0, 30).map(c => clean(c).slice(0, 70))) }));
+        const out = await detect(payload);
+        (out.lapok || []).forEach((l, n) => {
+          const i = unknown.find(k => sheets[k].name === l.nev); const idx = i !== undefined ? i : unknown[n];
+          if (idx === undefined || !l.van_tetel || l.oszlop_megnevezes < 0 || l.oszlop_mennyiseg < 0) return;
+          plan[idx] = { hr: Math.max(0, l.fejlec_sor), ai: true, col: { no: l.oszlop_sorszam, name: l.oszlop_megnevezes, qty: l.oszlop_mennyiseg, unit: l.oszlop_egyseg, specs: l.oszlopok_leiras || [] } };
+          usedAi = true;
+        });
+      } catch (e) { aiError = e.message; }
+    }
+    const parts = [], skipped = [];
+    sheets.forEach((sh, i) => {
+      const items = plan[i] ? extract(sh.rows, plan[i].hr, plan[i].col, sh.name, parts.length + 1) : [];
+      if (items.length) parts.push({ no: parts.length + 1, name: clean(sh.name), sheet: sh.name, items, ai: !!plan[i].ai, header: (sh.rows[plan[i].hr] || []).map(clean), col: plan[i].col });
+      else skipped.push(sh.name);
+    });
+    return { fileName, parts, items: parts.flatMap(p => p.items), skipped, sheetCount: wb.SheetNames.length, usedAi, aiError };
   }
 
   async function readDocument(file) {

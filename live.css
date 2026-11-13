@@ -78,3 +78,4 @@ button.q-src:hover { background: #d5ebdd; text-decoration: underline; }
 .modal-b .pn { position: absolute; left: 0; font: 11.5px var(--mono); color: var(--faint); top: 2px; }
 .modal-b mark { background: #ffe9a8; padding: 1px 0; }
 .modal-f { padding: 8px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.drop-i { margin-top: 6px; font-size: 12px; color: var(--muted); }

@@ -4,3 +4,4 @@ forras/
 node_modules/
 .vercel/
 .claude/
+minta/_*

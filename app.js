@@ -101,7 +101,8 @@
       <label class="drop ${f.sheet ? 'has' : ''}" data-kind="sheet"><input type="file" accept=".xls,.xlsx,.xlsm,.csv" hidden>
         <div class="drop-t">1. Tételjegyzék / ártáblázat</div>
         <div class="drop-f">${f.sheet ? esc(f.sheet.name) : 'Húzza ide, vagy kattintson (.xls, .xlsx)'}</div>
-        ${st.book ? `<div class="drop-s">${st.book.sheetCount} munkalap, ebből ${c.parts} tartalmaz tételeket · ${c.items} tétel · ${esc(qtyText(items()))}</div>` : ''}</label>
+        ${st.detecting ? '<div class="drop-s"><span class="spin"></span> A táblázat szerkezetének felismerése…</div>' : ''}
+        ${st.book ? `<div class="drop-s">${st.book.sheetCount} munkalap, ebből ${c.parts} tartalmaz tételeket · ${c.items} tétel · ${esc(qtyText(items()))}</div>${st.book.usedAi ? colInfo() : ''}` : ''}</label>
       <label class="drop ${f.doc ? 'has' : ''}" data-kind="doc"><input type="file" accept=".docx,.txt" hidden>
         <div class="drop-t">2. Kiírás, műszaki leírás, szerződéstervezet</div>
         <div class="drop-f">${f.doc ? esc(f.doc.name) : 'Húzza ide, vagy kattintson (.docx)'}</div>
@@ -123,6 +124,13 @@
     if (st.book && !st.running && !c.read) h += previewTable();
     $('#view-feltoltes').innerHTML = h;
     fetch('data/mentett.json', { method: 'HEAD' }).then(r => { const b = $('#btn-saved'); if (b && r.ok) b.hidden = false; }).catch(() => {});
+  }
+  // Ismeretlen szerkezetű táblázatnál megmutatjuk, mit minek olvasott a program.
+  function colInfo() {
+    const p = st.book.parts.find(x => x.ai); if (!p) return '';
+    const h = i => (i >= 0 && p.header[i]) ? '„' + esc(p.header[i]) + '”' : '';
+    const specs = (p.col.specs || []).map(h).filter(Boolean);
+    return `<div class="drop-i">Ismeretlen szerkezetű táblázat, az oszlopokat a program ismerte fel: megnevezés ${h(p.col.name)}, mennyiség ${h(p.col.qty)}${specs.length ? ', műszaki tartalom ' + specs.join(', ') : ''}.</div>`;
   }
   function stepRow(label, status, err, partNo) {
     const map = { idle: ['grey', 'Várakozik'], run: ['', 'Olvasás…'], ok: ['ok', 'Kész'], err: ['neg', 'Hiba'] };
@@ -355,9 +363,10 @@
   async function setFile(kind, file) {
     try {
       if (kind === 'sheet') {
-        st.files.sheet = file; st.book = Parse.readWorkbook(await file.arrayBuffer(), file.name);
+        st.files.sheet = file; st.book = null; st.detecting = true; render();
+        try { st.book = await Parse.readWorkbook(await file.arrayBuffer(), file.name, sheets => api('columns', { sheets })); } finally { st.detecting = false; }
         st.ai = {}; st.tender = null; st.partStatus = {}; st.tenderStatus = 'idle'; st.elapsedMs = 0;
-        if (!st.book.items.length) { alert('Ebben a táblázatban nem találtam tételjegyzéket (Megnevezés és Mennyiség oszlop kell).'); st.book = null; st.files.sheet = null; }
+        if (!st.book.items.length) { alert('Ebben a táblázatban nem találtam tételjegyzéket.' + (st.book.aiError ? ' (' + st.book.aiError + ')' : '')); st.book = null; st.files.sheet = null; }
       } else {
         st.doc = await Parse.readDocument(file); st.files.doc = file; st.docIndex = Parse.makeDocIndex(st.doc.text);
       }
