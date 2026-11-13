@@ -97,3 +97,14 @@ th ins { background: var(--ok-bg); color: var(--ok); text-decoration: none; }
 .rv-w { margin: 5px 0 2px; font-weight: 500; }
 td p.small { margin: 2px 0 0; }
 #btn-rev-sample { text-align: left; white-space: normal; line-height: 1.4; }
+
+/* Érthetőség: lépések, magyarázó sorok, eltávolítás */
+.how { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.how > div { background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; }
+.how b { display: block; font-size: 13px; }
+.how span { display: block; font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.drop-h { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.rm { appearance: none; border: 1px solid var(--border-strong); background: var(--surface); color: var(--neg); border-radius: 3px; font: 500 11.5px var(--sans); padding: 1px 7px; margin-left: 6px; cursor: pointer; }
+.rm:hover { background: var(--neg-bg); }
+.btn.on { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+@media (max-width: 860px) { .how { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }

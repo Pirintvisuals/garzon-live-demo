@@ -115,22 +115,29 @@
     const f = st.files;
     let h = `<div class="view-head"><div><h2>Ajánlatkérés feltöltése</h2>
       <p>Két fájl kell: a tételjegyzék (Excel) és a kiírás dokumentuma (PDF vagy Word: műszaki leírás, szerződéstervezet). A program beolvassa a tételeket, oszlopokra bontja a leírásokat, szétosztja őket gyártás szerint, összeveti a dokumentummal, és előkészíti a kérdéseket. Ár nem kerül bele.</p></div></div>`;
+    h += `<div class="how"><div><b>1. Feltöltés</b><span>Amit az ajánlatkérő küldött: a tételek listája és a feltételek.</span></div>
+      <div><b>2. Feldolgozás</b><span>Kb. egy perc. A program végigolvassa az egészet.</span></div>
+      <div><b>3. Eredmény</b><span>Összefoglaló a vezetésnek, rendezett tételek, hibák a kiírásban, kérdések.</span></div>
+      <div><b>4. Árazás</b><span>Az árajánlatadó az előkészített Excelben folytatja. Árat a program nem ad.</span></div></div>`;
     h += `<div class="grid g2">
       <label class="drop ${f.sheet ? 'has' : ''}" data-kind="sheet"><input type="file" accept=".xls,.xlsx,.xlsm,.csv" hidden>
-        <div class="drop-t">1. Tételjegyzék / ártáblázat</div>
-        <div class="drop-f">${f.sheet ? esc(f.sheet.name) : 'Húzza ide, vagy kattintson (.xls, .xlsx)'}</div>
+        <div class="drop-t">1. Tételjegyzék (Excel)</div>
+        <div class="drop-h">Az ajánlatkérő táblázata arról, mit kér és hány darabot. Az ároszlopok üresek: azokat kell majd kitölteni az ajánlathoz.</div>
+        <div class="drop-f">${f.sheet ? esc(f.sheet.name) + (st.running ? '' : ' <button class="rm" data-remove="sheet" title="Fájl eltávolítása">Eltávolítás</button>') : 'Húzza ide, vagy kattintson (.xls, .xlsx)'}</div>
         ${st.detecting ? '<div class="drop-s"><span class="spin"></span> A táblázat szerkezetének felismerése…</div>' : ''}
         ${st.book ? `<div class="drop-s">${st.book.sheetCount} munkalap, ebből ${c.parts} tartalmaz tételeket · ${c.items} tétel · ${esc(qtyText(items()))}</div>${st.book.usedAi ? colInfo() : ''}` : ''}</label>
       <label class="drop ${f.doc ? 'has' : ''}" data-kind="doc"><input type="file" accept=".pdf,.docx,.txt" multiple hidden>
-        <div class="drop-t">2. Kiírás, műszaki leírás, szerződéstervezet</div>
-        <div class="drop-f">${f.doc ? esc(f.doc.name) : 'Húzza ide, vagy kattintson (.pdf, .docx), több fájl is lehet'}</div>
+        <div class="drop-t">2. Feltételek (PDF vagy Word)</div>
+        <div class="drop-h">A kiírás, a műszaki leírás, a szerződéstervezet: határidő, fizetés, kötbér, jótállás. Nem kötelező, de ebből lesz a vezetői összefoglaló.</div>
+        <div class="drop-f">${st.docs.length ? st.docs.map(d => `<div>${esc(d.fileName)}${st.running ? '' : ` <button class="rm" data-remove="doc" data-name="${esc(d.fileName)}" title="Fájl eltávolítása">Eltávolítás</button>`}</div>`).join('') : 'Húzza ide, vagy kattintson (.pdf, .docx), több fájl is lehet'}</div>
         ${st.reading ? `<div class="drop-s"><span class="spin"></span> ${esc(st.reading)}</div>` : ''}
         ${st.doc ? `<div class="drop-s">${st.docs.length} dokumentum · ${st.docIndex.paras.length.toLocaleString('hu-HU')} bekezdés${st.docs.some(d => d.scanned) ? ' · szkennelt PDF szövegfelismeréssel' : ''}</div>${st.docs.filter(d => d.failedPages && d.failedPages.length).map(d => `<div class="drop-i">${esc(d.fileName)}: ${d.failedPages.length} oldal nem volt olvasható (${d.failedPages.join(', ')}. oldal).</div>`).join('')}` : ''}</label>
     </div>`;
     h += `<div class="card"><div class="card-b actions">
       <button class="btn btn-primary btn-lg" id="btn-run" ${st.book && !st.running ? '' : 'disabled'}>${st.running ? 'Feldolgozás folyamatban…' : (done() ? 'Feldolgozás újra' : 'Feldolgozás indítása')}</button>
-      <button class="btn" data-sample="szeged" ${st.running ? 'disabled' : ''}>Minta: Szegedi Szakképzési Centrum, bútorbeszerzés 2026 (nyilvános közbeszerzés)</button>
-      <button class="btn btn-sm" data-sample="debrecen" ${st.running ? 'disabled' : ''}>Másik minta: Debrecen, 2018</button>
+      <span class="muted small">Nincs kéznél fájl? Próbálja ki egy valódi, nyilvános közbeszerzésen:</span>
+      <button class="btn ${st.sample === 'szeged' ? 'on' : ''}" data-sample="szeged" ${st.running ? 'disabled' : ''}>${st.sample === 'szeged' ? '✓ Betöltve: ' : 'Minta: '}Szegedi Szakképzési Centrum, bútorbeszerzés 2026</button>
+      <button class="btn btn-sm ${st.sample === 'debrecen' ? 'on' : ''}" data-sample="debrecen" ${st.running ? 'disabled' : ''}>${st.sample === 'debrecen' ? '✓ Betöltve: ' : 'Másik minta: '}Debrecen, 2018</button>
       <button class="btn" id="btn-saved" hidden>Korábban feldolgozott eredmény megnyitása</button>
     </div></div>`;
     if (st.book && (st.running || c.read || st.tenderStatus !== 'idle')) {
@@ -355,7 +362,7 @@
       <p>Ha az ajánlatkérő módosított tételjegyzéket ad ki (például kiegészítő tájékoztatás után), a program tételenként megmutatja, mi változott, és hogy ez érinti-e az árat. Nem kell a két táblázatot kézzel, soronként összenézni.</p></div></div>`;
     h += `<div class="grid g2"><label class="drop ${st.rev ? 'has' : ''}" data-kind="rev"><input type="file" accept=".xls,.xlsx,.xlsm" hidden>
         <div class="drop-t">Módosított tételjegyzék</div>
-        <div class="drop-f">${st.rev ? esc(st.rev.fileName) : 'Húzza ide, vagy kattintson (.xls, .xlsx)'}</div>
+        <div class="drop-f">${st.rev ? esc(st.rev.fileName) + ' <button class="rm" data-remove="rev" title="Fájl eltávolítása">Eltávolítás</button>' : 'Húzza ide, vagy kattintson (.xls, .xlsx)'}</div>
         ${st.revReading ? '<div class="drop-s"><span class="spin"></span> Beolvasás és összevetés…</div>' : ''}
         ${st.rev ? `<div class="drop-s">Összevetve ezzel: ${esc(st.book.fileName)}</div>` : ''}</label>
       <div class="card"><div class="card-b">${S && S.rev
@@ -423,13 +430,16 @@
   }
 
   /* ---------- feldolgozás ---------- */
+  // A jelszót a böngésző megjegyzi, így ezen a gépen csak egyszer kell megadni.
+  const getKey = () => { try { return localStorage.getItem('demoKey') || sessionStorage.getItem('demoKey') || ''; } catch (e) { return ''; } };
+  const setKey = v => { try { localStorage.setItem('demoKey', v); } catch (e) { try { sessionStorage.setItem('demoKey', v); } catch (e2) { /* nincs tároló */ } } };
   async function api(path, body) {
     for (;;) {
-      const r = await fetch('/api/' + path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-demo-key': sessionStorage.getItem('demoKey') || '' }, body: JSON.stringify(body) });
+      const r = await fetch('/api/' + path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-demo-key': getKey() }, body: JSON.stringify(body) });
       if (r.status === 401) {
         const pw = prompt('Jelszó a feldolgozáshoz:');
         if (!pw) throw new Error('Jelszó szükséges.');
-        sessionStorage.setItem('demoKey', pw); continue;
+        setKey(pw); continue;
       }
       const j = await r.json().catch(() => ({ error: 'Érvénytelen válasz a szervertől (' + r.status + ').' }));
       if (!r.ok) throw new Error(j.error || ('Hiba: ' + r.status));
@@ -512,6 +522,14 @@
     st.doc = { fileName: docs.map(d => d.fileName).join(' + '), text: Parse.combineDocs(docs) };
     st.files.doc = { name: st.doc.fileName }; st.docIndex = Parse.makeDocIndex(st.doc.text);
   }
+  // Feltöltött fájl eltávolítása (rossz fájl esetén). A tételjegyzék eltávolítása a feldolgozott eredményt is törli.
+  function removeFile(kind, name) {
+    if (st.running) return;
+    if (kind === 'sheet') { const docs = st.docs; st = fresh(); setDocs(docs); }
+    else if (kind === 'doc') { setDocs(st.docs.filter(d => d.fileName !== name)); st.tender = null; st.tenderStatus = 'idle'; }
+    else if (kind === 'rev') st.rev = null;
+    render();
+  }
   const getFile = async (url, name) => new File([await (await fetch(url)).blob()], name);
   async function loadSample(key) {
     const S = SAMPLES[key]; if (!S || st.running) return;
@@ -538,6 +556,7 @@
     if (t.dataset.tab) { st.tab = t.dataset.tab; render(); window.scrollTo(0, 0); }
     else if (t.classList.contains('q-open')) openSource(t.dataset);
     else if (t.id === 'btn-run') run();
+    else if (t.dataset.remove) { e.preventDefault(); removeFile(t.dataset.remove, t.dataset.name); }
     else if (t.dataset.sample) loadSample(t.dataset.sample);
     else if (t.id === 'btn-rev-sample') { const S = SAMPLES[st.sample]; getFile(S.rev[0], S.rev[1]).then(setRevision); }
     else if (t.id === 'btn-rev-retry') summarizeRevision();
