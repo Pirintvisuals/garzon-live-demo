@@ -63,7 +63,7 @@
   };
 
   const fresh = () => ({
-    sample: '', rev: null, prices: {}, todo: {}, chat: { open: false, msgs: [], draft: '' },
+    sample: '', rev: null, prices: {}, todo: {}, replay: null, replayed: false, chatCache: {}, chat: { open: false, msgs: [], draft: '' },
     tab: 'feltoltes', files: { sheet: null, doc: null }, book: null, doc: null, docIndex: null,
     ai: {}, tender: null, partStatus: {}, tenderStatus: 'idle', tenderError: '',
     docs: [], reading: '', running: false, startedAt: 0, elapsedMs: 0, model: '', filter: { maker: '', part: '', onlyNotes: false }, fromSaved: false
@@ -113,7 +113,7 @@
     const el = $('#timer');
     const ms = st.running ? Date.now() - st.startedAt : st.elapsedMs;
     el.hidden = !ms;
-    if (ms) el.textContent = (st.running ? 'Feldolgozás: ' : 'Feldolgozva: ') + (ms / 1000).toFixed(st.running ? 0 : 1).replace('.', ',') + ' mp';
+    if (ms) el.textContent = (st.running ? 'Feldolgozás: ' : 'Feldolgozva: ') + (ms / 1000).toFixed(st.running ? 0 : 1).replace('.', ',') + ' mp' + (!st.running && st.replayed ? ' (minta, korábbi futás)' : '');
   }
 
   function render() {
@@ -184,6 +184,7 @@
     if (st.book && (st.running || c.read || st.tenderStatus !== 'idle')) {
       h += `<div class="card"><div class="card-h"><h3>Feldolgozás állapota</h3><span class="muted">${c.read} / ${c.items} tétel értelmezve</span></div><div class="card-b">
         <div class="bar big"><i style="width:${c.items ? Math.round(100 * c.read / c.items) : 0}%"></i></div>
+        ${canReplay() || st.replayed ? '<p class="muted small" style="margin:10px 0 0">A beépített minta előre feldolgozott eredményt játszik vissza (az eredeti feldolgozás ideje a jobb felső sarokban). Saját fájl feltöltésekor a feldolgozás élőben fut.</p>' : ''}
         <div class="steps">${stepRow('Kiírás dokumentuma: összefoglaló, összevetés, kérdések', st.tenderStatus, st.tenderError)}
         ${st.book.parts.map(p => stepRow(`${esc(p.name)} · ${p.items.length} tétel`, st.partStatus[p.no] || 'idle', (st.partStatus['err' + p.no] || ''), p.no)).join('')}</div>
       </div></div>`;
@@ -533,6 +534,12 @@
     const list = st.rev.changes.filter(c => c.kind === 'changed');
     if (!list.length) return;
     st.rev.status = 'run'; st.rev.error = ''; render();
+    // Minta: a korábban elkészült összefoglalók visszajátszása, ha ugyanazokról a tételekről van szó.
+    const saved = st.replay && st.replay.rev && st.replay.rev.ai;
+    if (saved && st.sample && list.every(c => saved[c.id])) {
+      for (const c of list) { await sleep(220); st.rev.ai[c.id] = saved[c.id]; render(); }
+      st.rev.status = 'ok'; render(); return;
+    }
     const chunks = [];
     for (let i = 0; i < list.length; i += 6) chunks.push(list.slice(i, i + 6));
     try {
@@ -591,13 +598,16 @@
     const m = { q, loading: true }; c.msgs.push(m); c.draft = ''; c.focus = true;
     const inp = $('#chat-in'); if (inp) inp.value = '';
     renderChat();
+    // Minta: a javasolt kérdések válaszai előre elkészültek, így kulcs nélkül is működnek.
+    if (st.replay && st.sample && st.chatCache[q]) { await sleep(1300); m.a = st.chatCache[q]; m.loading = false; c.focus = true; renderChat(); return; }
     try {
       m.a = await api('chat', {
         question: q, docText: st.doc ? st.doc.text : '',
         items: items().map(i => ({ id: i.id, part: i.part, name: i.name, spec: i.spec, qty: i.qty, unit: i.unit })),
         history: c.msgs.filter(x => x.a).slice(-3).map(x => ({ q: x.q, a: x.a.valasz }))
       });
-    } catch (e) { m.err = e.message; }
+      if (CHAT_SUGG.includes(q)) st.chatCache[q] = m.a;
+    } catch (e) { m.err = e.message + (st.replay ? ' A mintánál a javasolt kérdések kulcs nélkül is működnek.' : ''); }
     m.loading = false; c.focus = true; renderChat();
   }
 
@@ -649,9 +659,35 @@
     const q = tasks.slice();
     await Promise.all(Array.from({ length: Math.min(n, q.length) }, async () => { while (q.length) await q.shift()(); }));
   }
+  // A beépített minta előre feldolgozott eredményét játssza vissza, API-hívás nélkül (bemutatóhoz, kredit nélkül).
+  const sleep = ms => new Promise(ok => setTimeout(ok, ms));
+  const canReplay = () => !!(st.replay && st.sample && st.replay.sample === st.sample && items().every(i => st.replay.ai[i.id]));
+  async function replayRun() {
+    const R = st.replay;
+    st.ai = {}; st.tender = null; st.rev = null; st.partStatus = {}; st.tenderStatus = 'run'; st.fromSaved = false; st.replayed = false;
+    st.running = true; st.startedAt = Date.now(); st.elapsedMs = 0;
+    const tick = setInterval(renderTimer, 500);
+    st.book.parts.forEach(p => { st.partStatus[p.no] = 'run'; });
+    render();
+    const queue = st.book.parts.map(p => p.items.slice());
+    while (queue.some(q => q.length)) {
+      await sleep(520);
+      queue.forEach((q, n) => {
+        q.splice(0, 2 + (n % 2)).forEach(it => { st.ai[it.id] = JSON.parse(JSON.stringify(R.ai[it.id])); });
+        if (!q.length) st.partStatus[st.book.parts[n].no] = 'ok';
+      });
+      render();
+    }
+    await sleep(900);
+    st.tender = JSON.parse(JSON.stringify(R.tender)); st.tenderStatus = 'ok'; st.model = R.model || '';
+    clearInterval(tick);
+    st.running = false; st.replayed = true; st.elapsedMs = R.elapsedMs || (Date.now() - st.startedAt);
+    st.tab = 'osszefoglalo'; render();
+  }
   async function run() {
     if (!st.book || st.running) return;
-    st.ai = {}; st.tender = null; st.partStatus = {}; st.tenderStatus = 'idle'; st.fromSaved = false;
+    if (canReplay()) return replayRun();
+    st.ai = {}; st.tender = null; st.partStatus = {}; st.tenderStatus = 'idle'; st.fromSaved = false; st.replayed = false;
     st.running = true; st.startedAt = Date.now(); st.elapsedMs = 0;
     const tick = setInterval(renderTimer, 500);
     render();
@@ -708,10 +744,13 @@
     st = fresh(); st.sample = key; render();
     await setFile('sheet', await getFile(S.sheet[0], S.sheet[1]));
     await setFile('doc', await Promise.all(S.docs.map(d => getFile(d[0], d[1]))));
+    // Ha ehhez a mintához van előre feldolgozott eredmény, a feldolgozás azt játssza vissza (API nélkül).
+    try { const s = await (await fetch('data/mentett.json')).json(); if (s && s.sample === key) { st.replay = s; st.chatCache = s.chatCache || {}; } } catch (e) { /* nincs mentett eredmény: élő feldolgozás */ }
+    render();
   }
-  function snapshot() { return { v: 1, savedAt: new Date().toISOString(), sample: st.sample, book: st.book, doc: st.doc, docs: st.docs, ai: st.ai, tender: st.tender, rev: st.rev, prices: st.prices, todo: st.todo, elapsedMs: st.elapsedMs, model: st.model }; }
+  function snapshot() { return { v: 1, savedAt: new Date().toISOString(), sample: st.sample, book: st.book, doc: st.doc, docs: st.docs, ai: st.ai, tender: st.tender, rev: st.rev, prices: {}, todo: {}, chatCache: st.chatCache, elapsedMs: st.elapsedMs, model: st.model }; }
   function restore(s) {
-    st = fresh(); Object.assign(st, { sample: s.sample || '', rev: s.rev || null, prices: s.prices || {}, todo: s.todo || {}, book: s.book, doc: s.doc, ai: s.ai, tender: s.tender, elapsedMs: s.elapsedMs, model: s.model, fromSaved: true });
+    st = fresh(); Object.assign(st, { sample: s.sample || '', rev: s.rev || null, prices: s.prices || {}, todo: s.todo || {}, replay: s.sample ? s : null, replayed: true, chatCache: s.chatCache || {}, book: s.book, doc: s.doc, ai: s.ai, tender: s.tender, elapsedMs: s.elapsedMs, model: s.model, fromSaved: true });
     st.files = { sheet: { name: s.book.fileName }, doc: s.doc ? { name: s.doc.fileName } : null };
     st.docs = s.docs || (s.doc ? [s.doc] : []);
     st.docIndex = s.doc ? Parse.makeDocIndex(s.doc.text) : null;

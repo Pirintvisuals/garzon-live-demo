@@ -47,10 +47,10 @@ module.exports = async (req, res) => {
     const doc = String(docText || '').slice(0, 400000);
     const list = (Array.isArray(items) ? items : []).slice(0, 600).map(i => `[${i.id}] ${i.part} | ${i.name} | ${i.qty} ${i.unit} | ${i.spec}`).join('\n');
     const prev = (Array.isArray(history) ? history : []).slice(-3).map(h => `Kérdés: ${String(h.q).slice(0, 300)}\nVálasz: ${String(h.a).slice(0, 500)}`).join('\n\n');
-    const user = (doc ? 'AZ AJÁNLATKÉRÉS DOKUMENTUMAI:\n"""\n' + doc + '\n"""\n\n' : 'Szöveges dokumentum nincs feltöltve, csak a tételjegyzék.\n\n') +
-      'TÉTELJEGYZÉK (soronként: [id] rész | megnevezés | mennyiség | leírás):\n' + list +
-      (prev ? '\n\nA BESZÉLGETÉS EDDIG:\n' + prev : '') + '\n\nA KOLLÉGA KÉRDÉSE: ' + q;
-    const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, thinking: 'low', maxOutputTokens: 4000 });
+    const stable = (doc ? 'AZ AJÁNLATKÉRÉS DOKUMENTUMAI:\n"""\n' + doc + '\n"""\n\n' : 'Szöveges dokumentum nincs feltöltve, csak a tételjegyzék.\n\n') +
+      'TÉTELJEGYZÉK (soronként: [id] rész | megnevezés | mennyiség | leírás):\n' + list;
+    const user = (prev ? '\n\nA BESZÉLGETÉS EDDIG:\n' + prev : '') + '\n\nA KOLLÉGA KÉRDÉSE: ' + q;
+    const out = await gemini({ system: SYSTEM, stable, user, schema: SCHEMA, thinking: 'low', maxOutputTokens: 4000 });
     res.status(200).json({ ...out.data, model: out.model });
   } catch (e) {
     res.status(502).json({ error: String(e.message || e) });

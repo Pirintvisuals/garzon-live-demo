@@ -96,7 +96,7 @@ module.exports = async (req, res) => {
       ? 'AJÁNLATKÉRÉSI DOKUMENTUM (' + (docName || 'dokumentum') + '):\n"""\n' + doc + '\n"""\n\n'
       : 'Szöveges dokumentum nem érkezett, csak a tételjegyzék. Az összefoglalót és az ellenőrzést a tételjegyzék alapján készítse, az idézetek a tételek leírásából származzanak.\n\n') +
       'TÉTELJEGYZÉK (soronként: [id] rész | megnevezés | mennyiség | leírás):\n' + list;
-    const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, maxOutputTokens: 40000 });
+    const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, maxOutputTokens: 40000, tier: 'strong' });
     res.status(200).json({ ...out.data, model: out.model, usage: out.usage });
   } catch (e) {
     res.status(502).json({ error: String(e.message || e) });

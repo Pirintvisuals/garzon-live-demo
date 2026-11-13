@@ -10,11 +10,21 @@ function guard(req, res) {
   // Jelszó nincs. Csak a saját oldalról érkező kérést szolgáljuk ki; a költség felső korlátja a Google AI Studio keret.
   const from = String(req.headers.origin || req.headers.referer || ''), host = String(req.headers.host || '');
   if (from && host && !from.includes(host)) { res.status(403).json({ error: 'Csak az alkalmazás saját oldaláról használható.' }); return false; }
-  if (!process.env.GEMINI_API_KEY) { res.status(500).json({ error: 'Nincs beállítva a GEMINI_API_KEY környezeti változó.' }); return false; }
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY) { res.status(500).json({ error: 'Élő feldolgozáshoz API-kulcs kell (ANTHROPIC_API_KEY). A beépített minta kulcs nélkül is működik.' }); return false; }
   return true;
 }
 
-async function gemini({ system, user, parts, schema, json = true, maxOutputTokens = 32000, thinking, modelOverride }) {
+// Ha van Anthropic kulcs, a Claude modellek dolgoznak; különben (átmenetileg) a Gemini.
+async function gemini(args) {
+  if (process.env.ANTHROPIC_API_KEY) {
+    const { claude, explain } = require('./_claude');
+    try { return await claude(args); } catch (e) { throw new Error(explain(e)); }
+  }
+  return geminiCall(args);
+}
+
+async function geminiCall({ system, user, stable, parts, schema, json = true, maxOutputTokens = 32000, thinking, modelOverride }) {
+  if (stable) user = stable + user;
   // A beállított modellnév tisztítása ("Gemini 2.5 Pro", "models/gemini-2.5-pro" is működjön); hibás névnél az alapértelmezett.
   const DEFAULT_MODEL = 'gemini-3.1-pro-preview';
   let model = String(process.env.GEMINI_MODEL || '').trim().toLowerCase().replace(/^models\//, '').replace(/\s+/g, '-');
