@@ -19,6 +19,13 @@ Három dolgot készít elő a cégvezetésnek és az árajánlatadónak.
    - azonos terméknek látszó tételek leírása a tételjegyzéken belül eltér (például más lapvastagság, más szelvény, más méret ugyanarra a korcsoportra);
    - a tételjegyzék valamit nem határoz meg, amit a dokumentum sem pótol.
    Csak érdemi, az árat, a gyártást vagy az ajánlat érvényességét érintő megállapítást írjon. Ne ismételje a tételenkénti elírásokat.
+   Minden kiírásnál végezze el az alábbi ellenőrzéseket, és ami eltérést ad, azt vegye fel:
+   a) Számolja meg a dokumentumban felsorolt teljesítési helyszíneket (címeket), és vesse össze a részek számával. Az összefoglalóban a helyszínek számát a ténylegesen megszámolt címek alapján adja meg.
+   b) Keressen a dokumentumban oda nem illő, más eljárásból bennmaradt követelményt (például a beszerzés tárgyához nem kapcsolódó szakmai minősítés, igazolás, tevékenység).
+   c) Vesse össze a részek és tételek számát a dokumentum és a tételjegyzék között.
+   d) Keressen olyan tételt, amelynek mérete vagy kialakítása gyártási, szállítási vagy szerelési szempontból különleges megoldást kíván, de a kiírás ezt nem részletezi.
+   e) Keressen olyan tételt, ahol a megnevezés és a leírás mást kér, vagy a leírás több, eltérő árú megoldást is megenged.
+   f) Keressen olyan szerződéses kötelezettséget (szerelés, üzembe helyezés, beépítés), amelynek terjedelme egyes tételeknél nem egyértelmű.
 3. kerdesek: az ajánlatkérőnek elküldhető kiegészítő tájékoztatás-kérés kérdései, udvarias, hivatalos magyar megfogalmazásban, önállóan érthetően.
 
 Szigorú szabályok:
@@ -26,7 +33,7 @@ Szigorú szabályok:
 - Külső szabványra, jogszabályra, piaci szokásra csak akkor hivatkozzon, ha azt a dokumentum maga említi. Saját tudásból ne állítson szabványtól való eltérést.
 - Az idézet egyetlen összefüggő szövegrész legyen. Ne fűzze össze a megnevezést és a leírást, ne használjon kihagyást ("...").
 - A kérdések ne tartalmazzanak megszólítást és elköszönést (ezt a levél adja), csak magát a kérdést, a rész és a tétel számára hivatkozva.
-- Az ellenorzes listába 5-10 megállapítás kerüljön, fontossági sorrendben. Külön figyeljen arra, ha ugyanaz a terméktípus a különböző részekben eltérő műszaki tartalommal szerepel, és arra, ha a szerződéses feltétel (szerelés, üzembe helyezés, szállítás több helyszínre) egyes tételeknél többletköltséget jelent.
+- Az ellenorzes listába 6-12 megállapítás kerüljön, fontossági sorrendben. Külön figyeljen arra, ha ugyanaz a terméktípus a különböző részekben eltérő műszaki tartalommal szerepel, és arra, ha a szerződéses feltétel (szerelés, üzembe helyezés, szállítás több helyszínre) egyes tételeknél többletköltséget jelent.
 - Minden feltételhez, kockázathoz és megállapításhoz adjon "idezet" mezőt: egyetlen összefüggő, szó szerinti, változtatás nélküli, legfeljebb 200 karakteres részlet a dokumentumból, kihagyás (\"...\") nélkül. Ha a megállapítás a tételjegyzéken alapul, az idezet a tétel leírásából származzon, és az "erintett_tetelek" mezőben sorolja fel a tételek id-ját.
 - Ha valamit nem talál a dokumentumban (például nincs ajánlattételi határidő), ne írja be feltételként; ha fontos, tegye fel kérdésként.
 - A válasz nyelve magyar, tömör, szakmai. Kötőjeles gondolatjelet ne használjon.`;
