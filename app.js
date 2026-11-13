@@ -63,7 +63,7 @@
   };
 
   const fresh = () => ({
-    sample: '', rev: null, prices: {}, todo: {},
+    sample: '', rev: null, prices: {}, todo: {}, chat: { open: false, msgs: [], draft: '' },
     tab: 'feltoltes', files: { sheet: null, doc: null }, book: null, doc: null, docIndex: null,
     ai: {}, tender: null, partStatus: {}, tenderStatus: 'idle', tenderError: '',
     docs: [], reading: '', running: false, startedAt: 0, elapsedMs: 0, model: '', filter: { maker: '', part: '', onlyNotes: false }, fromSaved: false
@@ -120,6 +120,7 @@
     renderChrome();
     ({ feltoltes: viewUpload, osszefoglalo: viewBrief, tetelek: viewItems, bontas: viewSplit, ellenorzes: viewCheck, kerdesek: viewQuestions, arazas: viewPricing, revizio: viewRevision })[st.tab]();
     decorate();
+    renderChat();
   }
   // Az aktív oldal kerete: felül, mire jó és mit érdemes tenni; alul, mi a következő lépés.
   function decorate() {
@@ -545,6 +546,56 @@
     render();
   }
 
+  /* ---------- Csevegés a kiírással: a sarokban, minden oldalon ---------- */
+  const CHAT_SUGG = ['Mennyi a késedelmi kötbér?', 'Van-e előleg, és mikor fizetnek?', 'Hány helyszínre kell szállítani?', 'Mely tételeknél kell helyszíni szerelés?'];
+  function chatMsgHtml(m, n) {
+    let a = '';
+    if (m.loading) a = '<div class="cm a"><span class="spin"></span> Keresem a dokumentumokban…</div>';
+    else if (m.err) a = `<div class="cm a err">Nem sikerült válaszolni: ${esc(m.err)}</div>`;
+    else if (m.a) {
+      const r = m.a;
+      a = `<div class="cm a ${r.talalt ? '' : 'nf'}"><p>${esc(r.valasz)}</p>
+        ${!r.talalt && r.javaslat ? `<p class="cm-help">${esc(r.javaslat)}</p>` : ''}
+        ${(r.idezetek || []).map(q => quoteSrc(q.idezet, q.forras, q.tetel_id ? [q.tetel_id] : null)).join('')}
+        ${!r.talalt && r.kerdes_az_ajanlatkeronek && st.tender ? (m.added
+          ? '<div class="cm-added">✓ Felvéve a Kérdések közé</div>'
+          : `<div class="cm-ask"><span>Ezt érdemes megkérdezni az ajánlatkérőtől:</span><em>${esc(r.kerdes_az_ajanlatkeronek)}</em><button class="btn btn-sm" data-addq="${n}">Felvétel a Kérdések közé</button></div>`) : ''}</div>`;
+    }
+    return `<div class="cm q">${esc(m.q)}</div>${a}`;
+  }
+  function renderChat() {
+    let box = $('#chat');
+    if (!box) { box = document.createElement('div'); box.id = 'chat'; document.body.appendChild(box); }
+    if (!st.book) { box.innerHTML = ''; return; }
+    const c = st.chat, old = box.querySelector('#chat-in'), focused = old && document.activeElement === old;
+    if (old) c.draft = old.value;
+    if (!c.open) { box.innerHTML = '<button id="chat-fab" class="chat-fab"><span class="cf-i">?</span>Kérdezzen a kiírásról</button>'; return; }
+    const busy = c.msgs.some(m => m.loading);
+    box.innerHTML = `<div class="chat-panel" role="dialog" aria-label="Kérdezzen a kiírásról">
+      <div class="chat-h"><div><b>Kérdezzen a kiírásról</b><span>Csak a feltöltött fájlokból válaszol, forrással.</span></div><button class="btn btn-sm" id="chat-close">Bezárás</button></div>
+      <div class="chat-b" id="chat-b">${c.msgs.length ? c.msgs.map(chatMsgHtml).join('') : `<div class="chat-empty">Tegyen fel kérdést a szerződésről, a feltételekről vagy a tételekről. Például:</div>`}
+        ${c.msgs.length ? '' : `<div class="chat-sugg">${CHAT_SUGG.map(q => `<button class="chip" data-chatq="${esc(q)}">${esc(q)}</button>`).join('')}</div>`}</div>
+      <div class="chat-f"><input id="chat-in" type="text" maxlength="400" placeholder="Írja be a kérdését…" autocomplete="off" ${busy ? 'disabled' : ''}><button class="btn btn-primary" id="chat-send" ${busy ? 'disabled' : ''}>Küldés</button></div></div>`;
+    const inp = box.querySelector('#chat-in'); inp.value = c.draft || '';
+    if (focused || c.focus) { inp.focus(); c.focus = false; }
+    const b = box.querySelector('#chat-b'); b.scrollTop = b.scrollHeight;
+  }
+  async function askChat(q) {
+    q = String(q || '').trim(); const c = st.chat;
+    if (!q || !st.book || c.msgs.some(m => m.loading)) return;
+    const m = { q, loading: true }; c.msgs.push(m); c.draft = ''; c.focus = true;
+    const inp = $('#chat-in'); if (inp) inp.value = '';
+    renderChat();
+    try {
+      m.a = await api('chat', {
+        question: q, docText: st.doc ? st.doc.text : '',
+        items: items().map(i => ({ id: i.id, part: i.part, name: i.name, spec: i.spec, qty: i.qty, unit: i.unit })),
+        history: c.msgs.filter(x => x.a).slice(-3).map(x => ({ q: x.q, a: x.a.valasz }))
+      });
+    } catch (e) { m.err = e.message; }
+    m.loading = false; c.focus = true; renderChat();
+  }
+
   /* ---------- feldolgozás ---------- */
   // A jelszót a böngésző megjegyzi, így ezen a gépen csak egyszer kell megadni.
   const getKey = () => { try { return localStorage.getItem('demoKey') || sessionStorage.getItem('demoKey') || ''; } catch (e) { return ''; } };
@@ -672,6 +723,14 @@
     if (t.dataset.tab) { st.tab = t.dataset.tab; render(); window.scrollTo(0, 0); }
     else if (t.classList.contains('q-open')) openSource(t.dataset);
     else if (t.id === 'btn-run') run();
+    else if (t.id === 'chat-fab') { st.chat.open = true; st.chat.focus = true; renderChat(); }
+    else if (t.id === 'chat-close') { st.chat.open = false; renderChat(); }
+    else if (t.id === 'chat-send') askChat(($('#chat-in') || {}).value);
+    else if (t.dataset.chatq) askChat(t.dataset.chatq);
+    else if (t.dataset.addq !== undefined) {
+      const m = st.chat.msgs[Number(t.dataset.addq)];
+      if (m && m.a && st.tender) { st.tender.kerdesek.push({ kerdes: m.a.kerdes_az_ajanlatkeronek, miert: 'A csevegésben merült fel; a feltöltött dokumentumok nem adnak rá választ.', erintett_tetelek: [] }); m.added = true; render(); }
+    }
     else if (t.dataset.remove) { e.preventDefault(); removeFile(t.dataset.remove, t.dataset.name); }
     else if (t.dataset.sample) loadSample(t.dataset.sample);
     else if (t.id === 'btn-rev-sample') { const S = SAMPLES[st.sample]; getFile(S.rev[0], S.rev[1]).then(setRevision); }
@@ -705,6 +764,7 @@
       else { if (d.dataset.kind === 'sheet') st.sample = ''; setFile(d.dataset.kind, d.dataset.kind === 'doc' ? [...e.dataTransfer.files] : e.dataTransfer.files[0]); }
     }
   }));
+  document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'chat-in') { e.preventDefault(); askChat(e.target.value); } });
   // Ctrl+Shift+S: a feldolgozott eredmény mentése JSON-ba (ebből lesz a data/mentett.json tartalék).
   document.addEventListener('keydown', e => {
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 's' && st.book) {
