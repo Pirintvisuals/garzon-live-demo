@@ -34,6 +34,18 @@
     { id: 'arazas', label: 'Árazás' },
     { id: 'revizio', label: 'Módosítás érkezett' }
   ];
+  // Minden résznek saját színe van: ugyanaz a szín a folyamatábrán, a fülön és az oldal tetején.
+  const SEC = { feltoltes: '#5d6873', osszefoglalo: '#2f5866', ellenorzes: '#b7791f', kerdesek: '#2b6cb0', tetelek: '#4a5568', bontas: '#a8763e', arazas: '#2c6845', revizio: '#6b4f9a' };
+  // Mire jó az oldal, és mit érdemes rajta csinálni.
+  const GUIDE = {
+    osszefoglalo: ['Egy pillantásra: mit talált a program ebben az ajánlatkérésben.', 'Nézze át a négy kártyát. Lent a vezetésnek szóló rész: a szerződés feltételei és kockázatai alapján érdemes-e ajánlatot adni.'],
+    ellenorzes: ['Hol hibás vagy ellentmondásos az ajánlatkérő listája. Ha ez rejtve marad, rossz terméket áraznak be.', 'A „Forrás” gombbal nyissa meg az eredeti szöveget, és döntse el, melyik hibára kell rákérdezni.'],
+    kerdesek: ['A talált hibákból kész levél az ajánlatkérőnek (kiegészítő tájékoztatás-kérés).', 'Olvassa át, másolja ki, szerkessze, és küldje el.'],
+    tetelek: ['Az ajánlatkérő szabad szöveges leírásai rendezve: méret, anyag, szín külön oszlopban.', 'Ellenőrizze a tételeket. A „Gyártás” oszlopban átállítható, ki készíti.'],
+    bontas: ['Melyik üzem mit gyárt, és mit kell beszállítótól megvenni.', 'Adja tovább a listákat az üzemeknek. A beszállítói tételekhez kész az ajánlatkérő szöveg.'],
+    arazas: ['Gyors becslés arra, mekkora ez az ajánlat. A program az Önök árait nem ismeri.', 'Írjon be átlagárat kategóriánként. A pontos árazás a letöltött Excelben történik, tételenként.'],
+    revizio: ['Ha az ajánlatkérő később javított tételjegyzéket küld: pontosan mi változott?', 'Töltse fel az új táblázatot. A változások tételenként, színnel jelölve látszanak.']
+  };
   const IMPACT = { igen: { label: 'Árat érinti', cls: 'neg' }, lehet: { label: 'Árat érintheti', cls: 'warn' }, nem: { label: 'Csak pontosítás', cls: 'grey' } };
 
   // Minták: nyilvános közbeszerzések dokumentumai.
@@ -87,7 +99,7 @@
       if (t.id === 'kerdesek' && c.questions) cnt = `<span class="cnt">${c.questions}</span>`;
       if (t.id === 'revizio' && st.rev) cnt = `<span class="cnt warn">${st.rev.changes.length}</span>`;
       const disabled = t.id !== 'feltoltes' && !st.book;
-      return `<button class="tab" role="tab" data-tab="${t.id}" aria-selected="${st.tab === t.id}" ${disabled ? 'disabled' : ''}><span class="tn">${TABS.indexOf(t) + 1}</span>${t.label}${cnt}</button>`;
+      return `<button class="tab" role="tab" data-tab="${t.id}" style="--sec:${SEC[t.id]}" aria-selected="${st.tab === t.id}" ${disabled ? 'disabled' : ''}><span class="tn">${TABS.indexOf(t) + 1}</span>${t.label}${cnt}</button>`;
     }).join('');
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + st.tab));
     const title = st.tender ? st.tender.osszefoglalo.targy : (st.book ? st.book.fileName : 'Nincs betöltött ajánlatkérés');
@@ -107,6 +119,19 @@
   function render() {
     renderChrome();
     ({ feltoltes: viewUpload, osszefoglalo: viewBrief, tetelek: viewItems, bontas: viewSplit, ellenorzes: viewCheck, kerdesek: viewQuestions, arazas: viewPricing, revizio: viewRevision })[st.tab]();
+    decorate();
+  }
+  // Az aktív oldal kerete: felül, mire jó és mit érdemes tenni; alul, mi a következő lépés.
+  function decorate() {
+    const el = $('#view-' + st.tab), g = GUIDE[st.tab];
+    el.style.setProperty('--sec', SEC[st.tab]);
+    if (!g || !st.book) return;
+    const idx = TABS.findIndex(t => t.id === st.tab), next = TABS[idx + 1];
+    el.classList.add('guided');
+    el.insertAdjacentHTML('afterbegin', `<div class="guide"><span class="g-n">${idx + 1}</span><div><div class="g-what">${esc(g[0])}</div><div class="g-do"><b>Mit tegyen itt:</b> ${esc(g[1])}</div></div></div>`);
+    el.insertAdjacentHTML('beforeend', next
+      ? `<div class="nextbar" style="--sec:${SEC[next.id]}"><span>Következő lépés</span><button class="btn nextbtn" data-tab="${next.id}"><span class="tn">${idx + 2}</span>${next.label} →</button></div>`
+      : `<div class="nextbar"><span>Ez az utolsó lépés. Az előkészített munkafüzet a jobb felső gombbal letölthető, az árazás abban folytatható.</span></div>`);
   }
 
   const waiting = what => `<div class="card"><div class="card-b empty">${st.running ? '<span class="spin"></span> ' + what + ' készül…' : 'Még nincs feldolgozott adat. Indítsa el a feldolgozást a Feltöltés fülön.'}</div></div>`;
@@ -117,10 +142,23 @@
     const f = st.files;
     let h = `<div class="view-head"><div><h2>Ajánlatkérés feltöltése</h2>
       <p>Két fájl kell: a tételjegyzék (Excel) és a kiírás dokumentuma (PDF vagy Word: műszaki leírás, szerződéstervezet). A program beolvassa a tételeket, oszlopokra bontja a leírásokat, szétosztja őket gyártás szerint, összeveti a dokumentummal, és előkészíti a kérdéseket. Ár nem kerül bele.</p></div></div>`;
-    h += `<div class="how"><div><b>1. Feltöltés</b><span>Amit az ajánlatkérő küldött: a tételek listája és a feltételek.</span></div>
-      <div><b>2. Feldolgozás</b><span>Kb. egy perc. A program végigolvassa az egészet.</span></div>
-      <div><b>3. Eredmény</b><span>Összefoglaló a vezetésnek, rendezett tételek, hibák a kiírásban, kérdések.</span></div>
-      <div><b>4. Árazás</b><span>Az árajánlatadó az előkészített Excelben folytatja. Árat a program nem ad.</span></div></div>`;
+    const outBtn = (id, title, sub) => `<button class="fl-out" style="--sec:${SEC[id]}" data-tab="${id}" ${st.book ? '' : 'disabled'}><b>${title}</b><span>${sub}</span></button>`;
+    h += `<div class="flow">
+      <div class="fl-col"><div class="fl-h">Amit az ajánlatkérő küld</div>
+        <div class="fl-in ${f.sheet ? 'ok' : ''}"><b>Tételjegyzék (Excel)</b><span>mit kér, hány darabot; az árak üresek</span></div>
+        <div class="fl-in ${f.doc ? 'ok' : ''}"><b>Feltételek (PDF, Word)</b><span>határidő, fizetés, kötbér, jótállás</span></div></div>
+      <div class="fl-arrow">→</div>
+      <div class="fl-mid"><b>A program végigolvassa</b><span>kb. 1 perc</span></div>
+      <div class="fl-arrow">→</div>
+      <div class="fl-col wide"><div class="fl-h">Amit Ön kap, ellenőrzésre</div><div class="fl-outs">
+        ${outBtn('ellenorzes', 'Hibák a kiírásban', 'ellentmondás, elírás, hiány')}
+        ${outBtn('kerdesek', 'Kérdések', 'kész levél az ajánlatkérőnek')}
+        ${outBtn('tetelek', 'Rendezett tételek', 'méret, anyag, szín oszlopokban')}
+        ${outBtn('bontas', 'Ki gyártja', 'faüzem, fémüzem, beszállító')}
+        ${outBtn('arazas', 'Árbecslés és Excel', 'ebben folytatódik az árazás')}</div></div>
+      <div class="fl-arrow">→</div>
+      <div class="fl-end"><b>Az árajánlatadó áraz</b><span>Árat a program nem ad.</span></div>
+    </div>`;
     h += `<div class="grid g2">
       <label class="drop ${f.sheet ? 'has' : ''}" data-kind="sheet"><input type="file" accept=".xls,.xlsx,.xlsm,.csv" hidden>
         <div class="drop-t">1. Tételjegyzék (Excel)</div>
