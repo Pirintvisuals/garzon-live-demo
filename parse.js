@@ -9,19 +9,24 @@
   function findHeader(rows) {
     for (let r = 0; r < Math.min(rows.length, 25); r++) {
       const cells = (rows[r] || []).map(low);
-      if (cells.some(c => /megnevez/.test(c)) && cells.some(c => /mennyis/.test(c))) return r;
+      if (cells.some(c => /megnevez/.test(c)) && cells.some(isQtyHeader)) return r;
     }
     return -1;
   }
+  // Mennyiség oszlop: „Mennyiség”, vagy maga az egység a fejléc („db”, „darab”, „menny.”).
+  const isQtyHeader = c => (/mennyis/.test(c) && !/egys/.test(c)) || /^(db|darab|menny\.?|db\.)$/.test(c);
 
   function mapColumns(header) {
     const h = header.map(low);
     const first = test => h.findIndex(test);
+    const spec = first(c => /specifik|műszaki leírás|műszaki tartalom|leírás/.test(c));
+    // A műszaki tartalomhoz tartozó további oszlopok (szín, helyszín, anyag stb.), az ár- és nyilatkozatoszlopok nélkül.
+    const extra = h.map((c, i) => (i !== spec && /^(szín|helyszín|anyag|felület|méret|megjegyzés|rajz)/.test(c)) ? i : -1).filter(i => i >= 0);
     return {
       no: first(c => /^(s(or)?sz|sorsz|ssz|tétel ?sz)/.test(c)),
       name: first(c => /megnevez/.test(c)),
-      spec: first(c => /specifik|műszaki leírás|műszaki tartalom|leírás/.test(c)),
-      qty: first(c => /mennyis/.test(c) && !/egys/.test(c)),
+      spec, extra,
+      qty: first(isQtyHeader),
       unit: first(c => /egys/.test(c) && /(mennyis|mérték)/.test(c))
     };
   }
@@ -79,7 +84,8 @@
       const hr = findHeader(sh.rows);
       if (hr < 0) return null;
       const c = mapColumns(sh.rows[hr]);
-      return c.name >= 0 && c.qty >= 0 ? { hr, col: { no: c.no, name: c.name, qty: c.qty, unit: c.unit, specs: c.spec >= 0 ? [c.spec] : [] } } : null;
+      const specs = [...c.extra.filter(i => i < c.spec), ...(c.spec >= 0 ? [c.spec] : []), ...c.extra.filter(i => i > c.spec)];
+      return c.name >= 0 && c.qty >= 0 ? { hr, col: { no: c.no, name: c.name, qty: c.qty, unit: c.unit, specs } } : null;
     });
     let usedAi = false, aiError = '';
     const unknown = sheets.map((sh, i) => i).filter(i => !plan[i] && sheets[i].rows.filter(rowHasText).length >= 3);

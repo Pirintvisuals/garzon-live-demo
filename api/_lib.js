@@ -39,6 +39,8 @@ async function gemini({ system, user, parts, schema, json = true, maxOutputToken
         if (r.status === 400 && body.generationConfig.thinkingConfig && /thinking/i.test(txt)) { delete body.generationConfig.thinkingConfig; attempt--; continue; }
         // Ismeretlen modellnévnél egyszer újrapróbáljuk az alapértelmezettel.
         if ((r.status === 404 || r.status === 400) && model !== DEFAULT_MODEL && /model/i.test(txt)) { model = DEFAULT_MODEL; attempt--; continue; }
+        // A havi költségkeret elérése nem átmeneti hiba: azonnal, érthetően jelezzük.
+        if (r.status === 429 && /spending cap|spend cap/i.test(txt)) throw Object.assign(new Error('Elfogyott a Gemini API havi költségkerete (Google AI Studio, Spend). A keret emelése után újra működik.'), { retry: false });
         const err = new Error('Gemini hiba ' + r.status + ' (' + model + '): ' + txt.slice(0, 400));
         err.retry = r.status === 429 || r.status >= 500;
         throw err;
