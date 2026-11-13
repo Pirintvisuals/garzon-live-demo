@@ -26,12 +26,13 @@
 
   const TABS = [
     { id: 'feltoltes', label: 'Feltöltés' },
-    { id: 'osszefoglalo', label: 'Vezetői összefoglaló' },
+    { id: 'osszefoglalo', label: 'Eredmény' },
+    { id: 'ellenorzes', label: 'Hibák a kiírásban' },
+    { id: 'kerdesek', label: 'Kérdések' },
     { id: 'tetelek', label: 'Tételek' },
-    { id: 'bontas', label: 'Gyártási bontás' },
-    { id: 'ellenorzes', label: 'Ellenőrizendő' },
-    { id: 'kerdesek', label: 'Kérdések az ajánlatkérőnek' },
-    { id: 'revizio', label: 'Revízió' }
+    { id: 'bontas', label: 'Ki gyártja' },
+    { id: 'arazas', label: 'Árazás' },
+    { id: 'revizio', label: 'Módosítás érkezett' }
   ];
   const IMPACT = { igen: { label: 'Árat érinti', cls: 'neg' }, lehet: { label: 'Árat érintheti', cls: 'warn' }, nem: { label: 'Csak pontosítás', cls: 'grey' } };
 
@@ -50,7 +51,7 @@
   };
 
   const fresh = () => ({
-    sample: '', rev: null,
+    sample: '', rev: null, prices: {},
     tab: 'feltoltes', files: { sheet: null, doc: null }, book: null, doc: null, docIndex: null,
     ai: {}, tender: null, partStatus: {}, tenderStatus: 'idle', tenderError: '',
     docs: [], reading: '', running: false, startedAt: 0, elapsedMs: 0, model: '', filter: { maker: '', part: '', onlyNotes: false }, fromSaved: false
@@ -70,6 +71,7 @@
       items: all.length, pieces: all.reduce((s, i) => s + i.qty, 0), parts: st.book ? st.book.parts.length : 0,
       read: all.filter(i => st.ai[i.id]).length,
       notes: all.reduce((s, i) => s + notesOf(i).length, 0),
+      errors: all.reduce((s, i) => s + notesOf(i).filter(n => n.tipus !== 'hiany').length, 0),
       findings: st.tender ? st.tender.ellenorzes.length : 0,
       questions: st.tender ? st.tender.kerdesek.length : 0
     };
@@ -81,11 +83,11 @@
     $('#tabs').innerHTML = TABS.map(t => {
       let cnt = '';
       if (t.id === 'tetelek' && c.items) cnt = `<span class="cnt">${c.items}</span>`;
-      if (t.id === 'ellenorzes' && (c.notes + c.findings)) cnt = `<span class="cnt warn">${c.notes + c.findings}</span>`;
+      if (t.id === 'ellenorzes' && (c.errors + c.findings)) cnt = `<span class="cnt warn">${c.errors + c.findings}</span>`;
       if (t.id === 'kerdesek' && c.questions) cnt = `<span class="cnt">${c.questions}</span>`;
       if (t.id === 'revizio' && st.rev) cnt = `<span class="cnt warn">${st.rev.changes.length}</span>`;
       const disabled = t.id !== 'feltoltes' && !st.book;
-      return `<button class="tab" role="tab" data-tab="${t.id}" aria-selected="${st.tab === t.id}" ${disabled ? 'disabled' : ''}>${t.label}${cnt}</button>`;
+      return `<button class="tab" role="tab" data-tab="${t.id}" aria-selected="${st.tab === t.id}" ${disabled ? 'disabled' : ''}><span class="tn">${TABS.indexOf(t) + 1}</span>${t.label}${cnt}</button>`;
     }).join('');
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + st.tab));
     const title = st.tender ? st.tender.osszefoglalo.targy : (st.book ? st.book.fileName : 'Nincs betöltött ajánlatkérés');
@@ -104,7 +106,7 @@
 
   function render() {
     renderChrome();
-    ({ feltoltes: viewUpload, osszefoglalo: viewBrief, tetelek: viewItems, bontas: viewSplit, ellenorzes: viewCheck, kerdesek: viewQuestions, revizio: viewRevision })[st.tab]();
+    ({ feltoltes: viewUpload, osszefoglalo: viewBrief, tetelek: viewItems, bontas: viewSplit, ellenorzes: viewCheck, kerdesek: viewQuestions, arazas: viewPricing, revizio: viewRevision })[st.tab]();
   }
 
   const waiting = what => `<div class="card"><div class="card-b empty">${st.running ? '<span class="spin"></span> ' + what + ' készül…' : 'Még nincs feldolgozott adat. Indítsa el a feldolgozást a Feltöltés fülön.'}</div></div>`;
@@ -194,12 +196,23 @@
     const o = st.tender.osszefoglalo, c = counts();
     const byMaker = Object.keys(MAKERS).map(k => ({ k, n: items().filter(i => makerOf(i) === k).length, q: qtyText(items().filter(i => makerOf(i) === k)) })).filter(x => x.n);
     let h = `<div class="view-head"><div><h2>${esc(o.targy)}</h2><p>${esc(o.ajanlatkero)}${o.eljaras ? ' · ' + esc(o.eljaras) : ''}</p></div></div>`;
-    h += `<div class="kpis"><div class="kpi"><div class="l">Részek</div><div class="v">${c.parts}</div><div class="s">külön megpályázható egység</div></div>
-      <div class="kpi"><div class="l">Tételek</div><div class="v">${c.items}</div><div class="s">${esc(qtyText(items()))}</div></div>
-      <div class="kpi warn"><div class="l">Ellenőrizendő</div><div class="v">${c.notes + c.findings}</div><div class="s">${c.notes} tételszintű, ${c.findings} a kiírásból</div></div>
-      <div class="kpi"><div class="l">Előkészített kérdés</div><div class="v">${c.questions}</div><div class="s">az ajánlatkérőnek</div></div></div>`;
-    h += `<div class="card" style="margin-top:16px"><div class="card-b"><p class="lead">${esc(o.rovid_leiras)}</p>
-      ${byMaker.length ? `<div class="makers">${byMaker.map(x => `<span class="mk ${MAKERS[x.k].cls}"><b>${MAKERS[x.k].label}</b> ${x.n} tétel · ${esc(x.q)}</span>`).join('')}</div>` : ''}</div></div>`;
+    const errs = errorNotes(), top = errs.slice(0, 3);
+    h += `<p class="lead" style="margin-bottom:14px">${esc(o.rovid_leiras)}</p>`;
+    h += `<div class="hub">
+      <div class="hubc warn"><div class="hub-n">${errs.length + c.findings}</div><div class="hub-t">hibát vagy tisztázandó pontot talált a kiírásban</div>
+        <ul>${top.map(({ it, n }) => `<li><b>${esc(it.name.trim())}:</b> ${esc(n.szoveg)}</li>`).join('') || '<li class="muted">Nem talált ellentmondást a tételekben.</li>'}</ul>
+        <button class="btn btn-primary" data-tab="ellenorzes">Mind megnézem</button></div>
+      <div class="hubc"><div class="hub-n">${c.questions}</div><div class="hub-t">kérdést készített elő az ajánlatkérőnek</div>
+        <ul>${st.tender.kerdesek.slice(0, 2).map(q => `<li>${esc(cleanQ(q.kerdes).slice(0, 150))}${cleanQ(q.kerdes).length > 150 ? '…' : ''}</li>`).join('')}</ul>
+        <button class="btn" data-tab="kerdesek">Levél megnyitása</button></div>
+      <div class="hubc"><div class="hub-n">${c.items}</div><div class="hub-t">tételt rendezett és osztott szét (${esc(qtyText(items()))})</div>
+        <div class="makers col">${byMaker.map(x => `<span class="mk ${MAKERS[x.k].cls}"><b>${MAKERS[x.k].label}</b> ${x.n} tétel · ${esc(x.q)}</span>`).join('')}</div>
+        <button class="btn" data-tab="bontas">Ki gyártja</button> <button class="btn" data-tab="tetelek">Tételek</button></div>
+      <div class="hubc"><div class="hub-n">${st.elapsedMs ? Math.round(st.elapsedMs / 1000) + ' mp' : '–'}</div><div class="hub-t">alatt olvasta végig a ${c.items} tételt és ${st.docIndex ? st.docIndex.paras.length.toLocaleString('hu-HU') + ' bekezdésnyi' : 'a'} dokumentumot</div>
+        <ul><li>Az árakat nem tölti ki: az árazás az Önök szakértelme.</li><li>Az előkészített Excel letölthető, abban folytatható a munka.</li></ul>
+        <button class="btn" data-tab="arazas">Árazás</button></div>
+    </div>
+    <h4 class="sec">A vezetésnek: feltételek és kockázatok a szerződésből</h4>`;
     h += `<div class="grid g-main"><div class="card"><div class="card-h"><h3>Feltételek, amelyek az árat és a kockázatot érintik</h3></div>
       <div class="tbl-wrap"><table><tbody>${o.feltetelek.map(f => `<tr><td class="k">${esc(f.nev)}</td><td>${esc(f.ertek)}${quoteSrc(f.idezet, 'dokumentum')}</td></tr>`).join('')}</tbody></table></div></div>
       <div><div class="card"><div class="card-h"><h3>Kockázatok</h3></div><div class="card-b risks">
@@ -301,20 +314,62 @@
   }
 
   /* ---------- Ellenőrizendő ---------- */
+  // Valódi hiba (ellentmondás, elírás) és egyszerű hiányzó adat szétválasztva: a hibák a fontosak.
+  const errorNotes = () => items().flatMap(it => notesOf(it).filter(n => n.tipus !== 'hiany').map(n => ({ it, n })));
+  const missingNotes = () => items().flatMap(it => notesOf(it).filter(n => n.tipus === 'hiany').map(n => ({ it, n })));
   function viewCheck() {
     const el = $('#view-ellenorzes');
     const c = counts();
     if (!st.tender && !c.read) { el.innerHTML = waiting('Az ellenőrzés'); return; }
-    let h = `<div class="view-head"><div><h2>Ellenőrizendő</h2><p>Ahol a kiírás ellentmondásos, hiányos, vagy a dokumentum olyat kér, ami a tételekben nem szerepel. Minden megállapítás mellett ott a szó szerinti idézet és a helye, hogy másodpercek alatt ellenőrizhető legyen.</p></div></div>`;
-    h += `<h4 class="sec">A kiírás dokumentuma és a tételjegyzék összevetése${st.tender ? ` (${c.findings})` : ''}</h4>`;
+    const errs = errorNotes(), miss = missingNotes();
+    let h = `<div class="view-head"><div><h2>Hibák a kiírásban</h2><p>Az ajánlatkérő táblázata és dokumentumai gyakran hibásak: elírás, ellentmondás, hiányzó adat. Ha ezek rejtve maradnak, rossz terméket áraznak be. Minden találat mellett ott az eredeti szöveg, a „Forrás” gombbal egy kattintással ellenőrizhető.</p></div></div>`;
+    h += `<h4 class="sec">1. Hibák a tételekben: ellentmondás, elírás (${errs.length})</h4>`;
+    h += errs.map(({ it, n }) => `<div class="flag"><div class="flag-h"><span class="flag-id">${esc(it.id)}</span><span class="flag-type">${NOTE_TYPES[n.tipus] || ''}</span><span class="flag-title">${esc(it.name)} <span class="muted" style="font-weight:400">· ${fmt(it.qty)} ${esc(it.unit)}</span></span></div>
+      <div class="flag-b one"><div><p>${esc(n.szoveg)}</p>${quoteSrc(n.idezet, 'tetelegyzek', [it.id])}</div></div></div>`).join('') || `<div class="card"><div class="card-b muted">${c.read ? 'Nem talált ellentmondást a tételekben.' : 'Készül…'}</div></div>`;
+    h += `<h4 class="sec">2. A feltételek és a tételjegyzék összevetése${st.tender ? ` (${c.findings})` : ''}</h4>`;
     if (!st.tender) h += waiting('Az összevetés');
     else h += st.tender.ellenorzes.map((f, n) => `<div class="flag"><div class="flag-h"><span class="flag-id">E-${String(n + 1).padStart(2, '0')}</span><span class="flag-type">${FIND_TYPES[f.tipus] || ''}</span><span class="badge ${SEV[f.sulyossag].cls}">${SEV[f.sulyossag].label}</span><span class="flag-title">${esc(f.cim)}</span></div>
       <div class="flag-b one"><div><p>${esc(f.leiras)}</p>${quoteSrc(f.idezet, f.forras, f.erintett_tetelek)}
       ${f.erintett_tetelek.length ? `<p class="muted small">Érintett tételek: ${f.erintett_tetelek.map(id => { const it = itemById(id); return it ? `<span class="badge grey" title="${esc(it.name)}">${esc(id)} ${esc(it.name)}</span>` : ''; }).join(' ')}</p>` : ''}</div></div></div>`).join('') || '<div class="card"><div class="card-b muted">Nincs megállapítás.</div></div>';
-    const noted = items().filter(i => notesOf(i).length);
-    h += `<h4 class="sec">Tételszintű észrevételek (${c.notes})</h4><div class="card"><div class="tbl-wrap"><table><thead><tr><th>Tétel</th><th>Megnevezés</th><th>Észrevétel</th><th>Idézet a leírásból</th><th>Hely</th></tr></thead><tbody>
-      ${noted.flatMap(it => notesOf(it).map(n => `<tr><td class="code">${esc(it.id)}</td><td>${esc(it.name)}</td><td><span class="badge warn">${NOTE_TYPES[n.tipus] || ''}</span> ${esc(n.szoveg)}</td><td class="muted">${n.idezet ? '„' + esc(n.idezet) + '”' : ''}</td><td class="muted nowrap">${esc(it.sheet)}, ${it.row}. sor</td></tr>`)).join('') || '<tr><td colspan="5" class="muted">Nincs tételszintű észrevétel.</td></tr>'}
+    h += `<h4 class="sec">3. Hiányzó adatok (${miss.length})</h4><div class="card"><div class="tbl-wrap"><table class="compact"><thead><tr><th>Tétel</th><th>Megnevezés</th><th>Mi hiányzik</th><th>Hely</th></tr></thead><tbody>
+      ${miss.map(({ it, n }) => `<tr><td class="code">${esc(it.id)}</td><td>${esc(it.name)}</td><td>${esc(n.szoveg)}</td><td class="muted nowrap">${esc(it.sheet)}, ${it.row}. sor</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nincs hiányzó adat.</td></tr>'}
       </tbody></table></div></div>`;
+    el.innerHTML = h;
+  }
+
+  /* ---------- Árazás: tájékoztató sáv kategóriánként ---------- */
+  const catOf = it => ((st.ai[it.id] && st.ai[it.id].kategoria) || 'egyéb').toLowerCase().trim();
+  const priceOf = it => { const p = st.prices[catOf(it)]; return p && p.avg > 0 ? p : null; };
+  const ft = n => Math.round(n).toLocaleString('hu-HU') + ' Ft';
+  function viewPricing() {
+    const el = $('#view-arazas');
+    if (!items().some(i => st.ai[i.id])) { el.innerHTML = waiting('Az árazó lap'); return; }
+    const cats = {};
+    items().forEach(it => { const k = catOf(it); (cats[k] = cats[k] || []).push(it); });
+    const keys = Object.keys(cats).sort((a, b) => cats[b].length - cats[a].length);
+    let lo = 0, hi = 0, mid = 0, pricedItems = 0;
+    let h = `<div class="view-head"><div><h2>Árazás: tájékoztató sáv</h2><p>A program nem ismeri az Önök árait, ezért itt nincs kitöltött szám. Írjon be kategóriánként egy átlagos nettó egységárat és egy ± sávot: a program beszorozza a mennyiségekkel, és megmutatja az ajánlat nagyságrendjét. Ez gyors becslés, nem ajánlati ár. A pontos árazás a letölthető Excelben, tételenként történik.</p></div></div>`;
+    h += `<div class="card"><div class="tbl-wrap"><table class="price"><thead><tr><th>Kategória</th><th class="num">Tétel</th><th class="num">Mennyiség</th><th>Átlagos nettó egységár</th><th>Sáv</th><th class="num">Becsült nettó érték</th></tr></thead><tbody>`;
+    for (const k of keys) {
+      const list = cats[k], p = st.prices[k] || {}, q = list.reduce((s2, i) => s2 + i.qty, 0);
+      let cell = '<span class="faint">X × mennyiség, ± Y %</span>';
+      if (p.avg > 0) {
+        const m = q * p.avg, d = m * (p.pm || 0) / 100;
+        lo += m - d; hi += m + d; mid += m; pricedItems += list.length;
+        cell = p.pm > 0 ? `<b>${ft(m - d)} – ${ft(m + d)}</b>` : `<b>${ft(m)}</b>`;
+      }
+      h += `<tr><td><b>${esc(k)}</b><div class="orig">${esc([...new Set(list.map(i => i.name.trim()))].slice(0, 3).join(', '))}${list.length > 3 ? '…' : ''}</div></td>
+        <td class="num">${list.length}</td><td class="num">${esc(qtyText(list))}</td>
+        <td><input class="pin" type="number" min="0" step="100" placeholder="X" value="${p.avg > 0 ? p.avg : ''}" data-price="${esc(k)}" aria-label="Átlagos egységár: ${esc(k)}"> Ft</td>
+        <td>± <input class="pin sm" type="number" min="0" max="100" step="1" placeholder="Y" value="${p.pm > 0 ? p.pm : ''}" data-pm="${esc(k)}" aria-label="Sáv százalékban: ${esc(k)}"> %</td>
+        <td class="num">${cell}</td></tr>`;
+    }
+    h += `<tr class="total"><td colspan="5">Összesen${pricedItems ? ` (${pricedItems} / ${items().length} tétel beárazva)` : ''}</td><td class="num">${pricedItems ? (hi > lo + 1 ? `${ft(lo)} – ${ft(hi)}` : ft(mid)) : 'Z'}</td></tr></tbody></table></div></div>`;
+    h += `<div class="grid g2"><div class="card"><div class="card-h"><h3>Az éles változatban</h3></div><div class="card-b"><ul class="chk">
+      <li>Az Önök saját árazó táblája töltődik be, nem kell kézzel beírni.</li>
+      <li>Az ár tételenként készül a méretből és az anyagból, nem kategóriaátlagból.</li>
+      <li>Az árajánlatadó minden árat felülírhat, a végső szám az övé.</li></ul></div></div>
+      <div class="card"><div class="card-h"><h3>Mi kerül az Excelbe</h3></div><div class="card-b"><p style="margin:0" class="muted">A beírt átlagár kiinduló egységárként bekerül a letöltött munkafüzet „Nettó egységár” oszlopába, ahol tételenként pontosítható. Ahol nincs megadva ár, az oszlop üres marad.</p></div></div></div>`;
     el.innerHTML = h;
   }
 
@@ -537,9 +592,9 @@
     await setFile('sheet', await getFile(S.sheet[0], S.sheet[1]));
     await setFile('doc', await Promise.all(S.docs.map(d => getFile(d[0], d[1]))));
   }
-  function snapshot() { return { v: 1, savedAt: new Date().toISOString(), sample: st.sample, book: st.book, doc: st.doc, docs: st.docs, ai: st.ai, tender: st.tender, rev: st.rev, elapsedMs: st.elapsedMs, model: st.model }; }
+  function snapshot() { return { v: 1, savedAt: new Date().toISOString(), sample: st.sample, book: st.book, doc: st.doc, docs: st.docs, ai: st.ai, tender: st.tender, rev: st.rev, prices: st.prices, elapsedMs: st.elapsedMs, model: st.model }; }
   function restore(s) {
-    st = fresh(); Object.assign(st, { sample: s.sample || '', rev: s.rev || null, book: s.book, doc: s.doc, ai: s.ai, tender: s.tender, elapsedMs: s.elapsedMs, model: s.model, fromSaved: true });
+    st = fresh(); Object.assign(st, { sample: s.sample || '', rev: s.rev || null, prices: s.prices || {}, book: s.book, doc: s.doc, ai: s.ai, tender: s.tender, elapsedMs: s.elapsedMs, model: s.model, fromSaved: true });
     st.files = { sheet: { name: s.book.fileName }, doc: s.doc ? { name: s.doc.fileName } : null };
     st.docs = s.docs || (s.doc ? [s.doc] : []);
     st.docIndex = s.doc ? Parse.makeDocIndex(s.doc.text) : null;
@@ -547,7 +602,7 @@
     st.tab = 'osszefoglalo'; render();
   }
   root.App.snapshot = snapshot; root.App.rfqText = rfqText; root.App.questionsText = () => (st.tender ? questionsText() : '');
-  root.App.helpers = { items, makerOf, notesOf, dims, counts, earlierFlags, NOTE_TYPES, SEV, FIND_TYPES, IMPACT };
+  root.App.helpers = { items, makerOf, notesOf, dims, counts, earlierFlags, priceOf, NOTE_TYPES, SEV, FIND_TYPES, IMPACT };
 
   /* ---------- események ---------- */
   const copy = (text, btn) => navigator.clipboard.writeText(text).then(() => { const t = btn.textContent; btn.textContent = 'Kimásolva'; setTimeout(() => { btn.textContent = t; }, 1500); });
@@ -573,6 +628,12 @@
     else if (t.id === 'f-part') { st.filter.part = t.value; render(); }
     else if (t.id === 'f-maker') { st.filter.maker = t.value; render(); }
     else if (t.id === 'f-notes') { st.filter.onlyNotes = t.checked; render(); }
+    else if (t.dataset.price !== undefined || t.dataset.pm !== undefined) {
+      const k = t.dataset.price !== undefined ? t.dataset.price : t.dataset.pm, v = Math.max(0, parseFloat(t.value) || 0);
+      st.prices[k] = st.prices[k] || {};
+      if (t.dataset.price !== undefined) st.prices[k].avg = v; else st.prices[k].pm = Math.min(100, v);
+      render();
+    }
   });
   ['dragover', 'drop'].forEach(ev => document.addEventListener(ev, e => {
     const d = e.target.closest && e.target.closest('.drop'); if (!d) return;

@@ -11,7 +11,7 @@
       const a = App.state.ai[it.id] || {};
       const r = startRow + n;
       return [it.id, it.part, it.name, it.spec, a.kategoria || '', a.szelesseg_mm || '', a.melyseg_mm || '', a.magassag_mm || '', a.anyag || '', a.vaz || '', a.szin || '',
-        a.gyarto ? MAKERS[a.gyarto].label : '', it.qty, it.unit, '', { f: `M${r}*O${r}` },
+        a.gyarto ? MAKERS[a.gyarto].label : '', it.qty, it.unit, (H.priceOf(it) || {}).avg || '', { f: `M${r}*O${r}` },
         H.notesOf(it).map(x => x.szoveg).join(' | '), `${it.sheet}, ${it.row}. sor`];
     });
   }

@@ -108,3 +108,23 @@ td p.small { margin: 2px 0 0; }
 .rm:hover { background: var(--neg-bg); }
 .btn.on { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
 @media (max-width: 860px) { .how { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+
+/* Áttekintő kártyák, számozott fülek, árazó lap */
+.tn { display: inline-block; width: 17px; height: 17px; line-height: 17px; margin-right: 6px; border-radius: 50%; background: #e6e9ec; color: var(--muted); font-size: 11px; text-align: center; font-weight: 600; }
+.tab[aria-selected="true"] .tn { background: var(--accent); color: #fff; }
+.hub { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.hubc { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.hubc.warn { border-color: var(--amber-border); background: var(--amber-bg); }
+.hub-n { font-size: 34px; font-weight: 600; line-height: 1.05; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.hubc.warn .hub-n { color: var(--amber-ink); }
+.hub-t { font-size: 14.5px; font-weight: 500; }
+.hubc ul { margin: 6px 0 8px; padding-left: 18px; display: grid; gap: 5px; font-size: 13px; color: var(--text); flex: 1; }
+.hubc .btn { align-self: flex-start; }
+.hubc > div:last-child, .hubc > .btn:last-child { margin-top: auto; }
+.makers.col { flex-direction: column; align-items: flex-start; margin: 6px 0 10px; flex: 1; }
+.pin { width: 110px; font: 500 13px var(--mono); padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); text-align: right; }
+.pin.sm { width: 62px; }
+.pin::placeholder { color: var(--faint); font-style: italic; }
+table.price td { vertical-align: middle; }
+table.price td:first-child { min-width: 220px; }
+@media (max-width: 860px) { .hub { grid-template-columns: minmax(0, 1fr); } }
