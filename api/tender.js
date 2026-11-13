@@ -22,7 +22,7 @@ Három dolgot készít elő a cégvezetésnek és az árajánlatadónak.
 
 Szigorú szabályok:
 - Csak azt állítsa, ami a kapott szövegekben szerepel. Ne találjon ki adatot, dátumot, összeget, jogszabályhelyet.
-- Minden feltételhez, kockázathoz és megállapításhoz adjon "idezet" mezőt: szó szerinti, változtatás nélküli, legfeljebb 200 karakteres részlet a dokumentumból. Ha a megállapítás a tételjegyzéken alapul, az idezet a tétel leírásából származzon, és az "erintett_tetelek" mezőben sorolja fel a tételek id-ját.
+- Minden feltételhez, kockázathoz és megállapításhoz adjon "idezet" mezőt: egyetlen összefüggő, szó szerinti, változtatás nélküli, legfeljebb 200 karakteres részlet a dokumentumból, kihagyás (\"...\") nélkül. Ha a megállapítás a tételjegyzéken alapul, az idezet a tétel leírásából származzon, és az "erintett_tetelek" mezőben sorolja fel a tételek id-ját.
 - Ha valamit nem talál a dokumentumban (például nincs ajánlattételi határidő), ne írja be feltételként; ha fontos, tegye fel kérdésként.
 - A válasz nyelve magyar, tömör, szakmai. Kötőjeles gondolatjelet ne használjon.`;
 

@@ -311,7 +311,7 @@
     st.running = true; st.startedAt = Date.now(); st.elapsedMs = 0;
     const tick = setInterval(renderTimer, 500);
     render();
-    await Promise.all([runTender(), pool(st.book.parts.map(p => () => runPart(p)), 4)]);
+    await Promise.all([runTender(), pool(st.book.parts.map(p => () => runPart(p)), 10)]);
     clearInterval(tick);
     st.running = false; st.elapsedMs = Date.now() - st.startedAt;
     if (done() && st.tender) st.tab = 'osszefoglalo';

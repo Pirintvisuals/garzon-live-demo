@@ -13,7 +13,7 @@ function guard(req, res) {
   return true;
 }
 
-async function gemini({ system, user, schema, maxOutputTokens = 32000 }) {
+async function gemini({ system, user, schema, maxOutputTokens = 32000, thinking }) {
   // A beállított modellnév tisztítása ("Gemini 2.5 Pro", "models/gemini-2.5-pro" is működjön); hibás névnél az alapértelmezett.
   const DEFAULT_MODEL = 'gemini-3.1-pro-preview';
   let model = String(process.env.GEMINI_MODEL || '').trim().toLowerCase().replace(/^models\//, '').replace(/\s+/g, '-');
@@ -23,6 +23,8 @@ async function gemini({ system, user, schema, maxOutputTokens = 32000 }) {
     contents: [{ role: 'user', parts: [{ text: user }] }],
     generationConfig: { temperature: 0.1, maxOutputTokens, responseMimeType: 'application/json', responseSchema: schema }
   };
+  // Gyorsabb válasz: a tételek értelmezéséhez elég az alacsony gondolkodási szint.
+  if (thinking) body.generationConfig.thinkingConfig = { thinkingLevel: thinking };
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -33,6 +35,7 @@ async function gemini({ system, user, schema, maxOutputTokens = 32000 }) {
       });
       const txt = await r.text();
       if (!r.ok) {
+        if (r.status === 400 && body.generationConfig.thinkingConfig && /thinking/i.test(txt)) { delete body.generationConfig.thinkingConfig; attempt--; continue; }
         // Ismeretlen modellnévnél egyszer újrapróbáljuk az alapértelmezettel.
         if ((r.status === 404 || r.status === 400) && model !== DEFAULT_MODEL && /model/i.test(txt)) { model = DEFAULT_MODEL; attempt--; continue; }
         const err = new Error('Gemini hiba ' + r.status + ' (' + model + '): ' + txt.slice(0, 400));

@@ -23,7 +23,8 @@ Szabályok:
   "ellentmondas" = a szöveg önmagának mond ellent (két eltérő méret, anyag vagy vastagság).
   "hiany" = árazáshoz szükséges adat hiányzik (méret, anyag, vastagság, szín, mennyiségi egység).
   "pontatlan" = elírás, értelmezhetetlen vagy kétértelmű megfogalmazás.
-  Minden észrevételhez adjon "idezet" mezőt: szó szerinti, változtatás nélküli részlet a tétel szövegéből (legfeljebb 120 karakter). Hiány esetén az idezet lehet üres.
+  Minden észrevételhez adjon "idezet" mezőt: egyetlen összefüggő, szó szerinti, változtatás nélküli részlet a tétel szövegéből (legfeljebb 120 karakter). Kihagyást ("...", "[...]") ne használjon, két külön szövegrészt ne fűzzön össze. Hiány esetén az idezet lehet üres.
+- Egy tételhez legfeljebb 3 észrevétel, a legfontosabbak. A méret megjegyzésbe ne ismételje meg az észrevételt.
 - Ha a tétel leírása rendben van, az eszrevetelek üres tömb.
 - A válasz nyelve magyar. Minden kapott tételhez pontosan egy elemet adjon vissza, ugyanazzal az id-val.`;
 
@@ -66,7 +67,7 @@ module.exports = async (req, res) => {
     if (items.length > 80) return res.status(400).json({ error: 'Egy kérésben legfeljebb 80 tétel küldhető.' });
     const user = 'Rész: ' + (part || '') + '\n\nTételek (JSON):\n' +
       JSON.stringify(items.map(i => ({ id: i.id, megnevezes: i.name, leiras: i.spec, mennyiseg: i.qty, egyseg: i.unit })), null, 1);
-    const out = await gemini({ system: SYSTEM, user, schema: SCHEMA });
+    const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, thinking: 'low' });
     res.status(200).json({ tetelek: out.data.tetelek || [], model: out.model, usage: out.usage });
   } catch (e) {
     res.status(502).json({ error: String(e.message || e) });
