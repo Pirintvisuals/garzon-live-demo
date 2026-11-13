@@ -68,10 +68,14 @@
    * Munkafüzet beolvasása. Először szabály alapján keressük a fejlécet; ahol ez nem sikerül,
    * a `detect` függvény (mesterséges intelligencia) megmondja az oszlopkiosztást. A tételeket mindig a kód olvassa ki.
    */
-  async function readWorkbook(buf, fileName, detect) {
+  async function readWorkbook(buf, fileName, detect, preset) {
     const wb = XLSX.read(buf, { type: 'array', codepage: 1250 });
     const sheets = wb.SheetNames.map(name => ({ name, rows: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', blankrows: true }) }));
+    const sameHeader = (row, header) => JSON.stringify((row || []).map(clean)) === JSON.stringify(header);
     const plan = sheets.map(sh => {
+      // Revíziónál: ha a munkalap fejléce ugyanaz, mint az eredetiben, ugyanazt az oszlopkiosztást használjuk.
+      const pr = preset && preset[sh.name];
+      if (pr && pr.hr >= 0 && sameHeader(sh.rows[pr.hr], pr.header)) return { hr: pr.hr, col: pr.col };
       const hr = findHeader(sh.rows);
       if (hr < 0) return null;
       const c = mapColumns(sh.rows[hr]);
@@ -94,7 +98,7 @@
     const parts = [], skipped = [];
     sheets.forEach((sh, i) => {
       const items = plan[i] ? extract(sh.rows, plan[i].hr, plan[i].col, sh.name, parts.length + 1) : [];
-      if (items.length) parts.push({ no: parts.length + 1, name: clean(sh.name), sheet: sh.name, items, ai: !!plan[i].ai, header: (sh.rows[plan[i].hr] || []).map(clean), col: plan[i].col });
+      if (items.length) parts.push({ no: parts.length + 1, name: clean(sh.name), sheet: sh.name, items, ai: !!plan[i].ai, hr: plan[i].hr, header: (sh.rows[plan[i].hr] || []).map(clean), col: plan[i].col });
       else skipped.push(sh.name);
     });
     return { fileName, parts, items: parts.flatMap(p => p.items), skipped, sheetCount: wb.SheetNames.length, usedAi, aiError };

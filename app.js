@@ -30,10 +30,27 @@
     { id: 'tetelek', label: 'Tételek' },
     { id: 'bontas', label: 'Gyártási bontás' },
     { id: 'ellenorzes', label: 'Ellenőrizendő' },
-    { id: 'kerdesek', label: 'Kérdések az ajánlatkérőnek' }
+    { id: 'kerdesek', label: 'Kérdések az ajánlatkérőnek' },
+    { id: 'revizio', label: 'Revízió' }
   ];
+  const IMPACT = { igen: { label: 'Árat érinti', cls: 'neg' }, lehet: { label: 'Árat érintheti', cls: 'warn' }, nem: { label: 'Csak pontosítás', cls: 'grey' } };
+
+  // Minták: nyilvános közbeszerzések dokumentumai.
+  const SAMPLES = {
+    szeged: {
+      sheet: ['minta/szeged_tetelegyzek_eredeti.xlsx', '1_sz_melleklet_butor-fin.xlsx'],
+      docs: [['minta/szeged_szerzodestervezet.pdf', 'Adásvételi szerződés bútor RRF SZSZC.pdf']],
+      rev: ['minta/szeged_tetelegyzek_2026-09-23.xlsx', '1_sz_melleklet_butor-260923.xlsx'],
+      revLabel: 'A 3. kiegészítő tájékoztatással kiadott tételjegyzék (2026.09.23.)'
+    },
+    debrecen: {
+      sheet: ['minta/debrecen_artablazatok.xls', 'Ártáblázatok_1_10.xls'],
+      docs: [['minta/debrecen_kozbeszerzesi_dok.docx', 'Közbeszerzési dok_1_10.docx']]
+    }
+  };
 
   const fresh = () => ({
+    sample: '', rev: null,
     tab: 'feltoltes', files: { sheet: null, doc: null }, book: null, doc: null, docIndex: null,
     ai: {}, tender: null, partStatus: {}, tenderStatus: 'idle', tenderError: '',
     docs: [], reading: '', running: false, startedAt: 0, elapsedMs: 0, model: '', filter: { maker: '', part: '', onlyNotes: false }, fromSaved: false
@@ -66,6 +83,7 @@
       if (t.id === 'tetelek' && c.items) cnt = `<span class="cnt">${c.items}</span>`;
       if (t.id === 'ellenorzes' && (c.notes + c.findings)) cnt = `<span class="cnt warn">${c.notes + c.findings}</span>`;
       if (t.id === 'kerdesek' && c.questions) cnt = `<span class="cnt">${c.questions}</span>`;
+      if (t.id === 'revizio' && st.rev) cnt = `<span class="cnt warn">${st.rev.changes.length}</span>`;
       const disabled = t.id !== 'feltoltes' && !st.book;
       return `<button class="tab" role="tab" data-tab="${t.id}" aria-selected="${st.tab === t.id}" ${disabled ? 'disabled' : ''}>${t.label}${cnt}</button>`;
     }).join('');
@@ -86,7 +104,7 @@
 
   function render() {
     renderChrome();
-    ({ feltoltes: viewUpload, osszefoglalo: viewBrief, tetelek: viewItems, bontas: viewSplit, ellenorzes: viewCheck, kerdesek: viewQuestions })[st.tab]();
+    ({ feltoltes: viewUpload, osszefoglalo: viewBrief, tetelek: viewItems, bontas: viewSplit, ellenorzes: viewCheck, kerdesek: viewQuestions, revizio: viewRevision })[st.tab]();
   }
 
   const waiting = what => `<div class="card"><div class="card-b empty">${st.running ? '<span class="spin"></span> ' + what + ' készül…' : 'Még nincs feldolgozott adat. Indítsa el a feldolgozást a Feltöltés fülön.'}</div></div>`;
@@ -96,7 +114,7 @@
     const c = counts();
     const f = st.files;
     let h = `<div class="view-head"><div><h2>Ajánlatkérés feltöltése</h2>
-      <p>Két fájl kell: a tételjegyzék (Excel) és a kiírás szöveges dokumentuma (Word). A program beolvassa a tételeket, oszlopokra bontja a leírásokat, szétosztja őket gyártás szerint, összeveti a dokumentummal, és előkészíti a kérdéseket. Ár nem kerül bele.</p></div></div>`;
+      <p>Két fájl kell: a tételjegyzék (Excel) és a kiírás dokumentuma (PDF vagy Word: műszaki leírás, szerződéstervezet). A program beolvassa a tételeket, oszlopokra bontja a leírásokat, szétosztja őket gyártás szerint, összeveti a dokumentummal, és előkészíti a kérdéseket. Ár nem kerül bele.</p></div></div>`;
     h += `<div class="grid g2">
       <label class="drop ${f.sheet ? 'has' : ''}" data-kind="sheet"><input type="file" accept=".xls,.xlsx,.xlsm,.csv" hidden>
         <div class="drop-t">1. Tételjegyzék / ártáblázat</div>
@@ -111,7 +129,8 @@
     </div>`;
     h += `<div class="card"><div class="card-b actions">
       <button class="btn btn-primary btn-lg" id="btn-run" ${st.book && !st.running ? '' : 'disabled'}>${st.running ? 'Feldolgozás folyamatban…' : (done() ? 'Feldolgozás újra' : 'Feldolgozás indítása')}</button>
-      <button class="btn" id="btn-sample" ${st.running ? 'disabled' : ''}>Minta betöltése: Debreceni Tankerületi Központ, bútorbeszerzés (nyilvános közbeszerzés)</button>
+      <button class="btn" data-sample="szeged" ${st.running ? 'disabled' : ''}>Minta: Szegedi Szakképzési Centrum, bútorbeszerzés 2026 (nyilvános közbeszerzés)</button>
+      <button class="btn btn-sm" data-sample="debrecen" ${st.running ? 'disabled' : ''}>Másik minta: Debrecen, 2018</button>
       <button class="btn" id="btn-saved" hidden>Korábban feldolgozott eredmény megnyitása</button>
     </div></div>`;
     if (st.book && (st.running || c.read || st.tenderStatus !== 'idle')) {
@@ -308,6 +327,101 @@
     el.innerHTML = h;
   }
 
+  /* ---------- Revízió ---------- */
+  // Szavankénti eltérés megjelenítése; a hosszú változatlan szakaszokat összecsukjuk.
+  function diffHtml(a, b) {
+    const ops = Diff.wordDiff(a, b), keep = 7;
+    return ops.map(([o, t], n) => {
+      if (o === '-') return `<del>${esc(t)}</del>`;
+      if (o === '+') return `<ins>${esc(t)}</ins>`;
+      const w = t.match(/\S+\s*/g) || [];
+      if (w.length <= keep * 2 + 3) return `<span class="dq">${esc(t)}</span>`;
+      const head = n === 0 ? [] : w.slice(0, keep), tail = n === ops.length - 1 ? [] : w.slice(-keep);
+      return `<span class="dq">${esc(head.join(''))}<span class="gap">…</span>${esc(tail.join(''))}</span>`;
+    }).join('');
+  }
+  // Mit jelzett a program ehhez a tételhez az eredeti kiírásnál (tételszintű észrevétel vs. kiírás-szintű megállapítás).
+  function earlierFlags(id) {
+    const it = itemById(id); if (!it) return [];
+    const out = notesOf(it).map(n => n.szoveg);
+    if (st.tender) st.tender.ellenorzes.forEach(f => { if ((f.erintett_tetelek || []).includes(id)) out.push(f.cim); });
+    return out;
+  }
+  function viewRevision() {
+    const el = $('#view-revizio');
+    if (!st.book) { el.innerHTML = waiting('Az összevetés'); return; }
+    const S = SAMPLES[st.sample];
+    let h = `<div class="view-head"><div><h2>Revízió: módosított tételjegyzék összevetése</h2>
+      <p>Ha az ajánlatkérő módosított tételjegyzéket ad ki (például kiegészítő tájékoztatás után), a program tételenként megmutatja, mi változott, és hogy ez érinti-e az árat. Nem kell a két táblázatot kézzel, soronként összenézni.</p></div></div>`;
+    h += `<div class="grid g2"><label class="drop ${st.rev ? 'has' : ''}" data-kind="rev"><input type="file" accept=".xls,.xlsx,.xlsm" hidden>
+        <div class="drop-t">Módosított tételjegyzék</div>
+        <div class="drop-f">${st.rev ? esc(st.rev.fileName) : 'Húzza ide, vagy kattintson (.xls, .xlsx)'}</div>
+        ${st.revReading ? '<div class="drop-s"><span class="spin"></span> Beolvasás és összevetés…</div>' : ''}
+        ${st.rev ? `<div class="drop-s">Összevetve ezzel: ${esc(st.book.fileName)}</div>` : ''}</label>
+      <div class="card"><div class="card-b">${S && S.rev
+        ? `<p class="muted small" style="margin:0 0 10px">A mintához tartozó valódi módosítás: az ajánlatkérő az ajánlattevők kérdései után háromszor adott ki javított tételjegyzéket.</p><button class="btn" id="btn-rev-sample" ${st.revReading ? 'disabled' : ''}>Minta: ${esc(S.rev[1])}<br><span class="faint">${esc(S.revLabel)}</span></button>`
+        : '<p class="muted small" style="margin:0">Töltse fel ugyanannak az ajánlatkérésnek egy későbbi, módosított tételjegyzékét.</p>'}</div></div></div>`;
+    if (!st.rev) { el.innerHTML = h; return; }
+    const ch = st.rev.changes, ai = st.rev.ai;
+    const changed = ch.filter(c => c.kind === 'changed'), flagged = changed.filter(c => earlierFlags(c.id).length);
+    const priced = ch.filter(c => ai[c.id] && ai[c.id].arat_erinti === 'igen').length;
+    h += `<div class="kpis" style="margin-top:16px"><div class="kpi warn"><div class="l">Módosított tétel</div><div class="v">${changed.length}</div><div class="s">${items().length} tételből</div></div>
+      <div class="kpi"><div class="l">Új / törölt tétel</div><div class="v">${ch.filter(c => c.kind === 'added').length} / ${ch.filter(c => c.kind === 'removed').length}</div><div class="s">a két változat között</div></div>
+      <div class="kpi"><div class="l">Árat érinti</div><div class="v">${st.rev.status === 'run' ? '<span class="spin"></span>' : priced}</div><div class="s">a módosítások közül</div></div>
+      <div class="kpi"><div class="l">Már az eredetinél jelezve</div><div class="v">${Object.keys(st.ai).length ? flagged.length : '–'}</div><div class="s">${Object.keys(st.ai).length ? 'ennyi módosított tételhez volt észrevétel' : 'előbb futtassa a feldolgozást'}</div></div></div>`;
+    if (!ch.length) { el.innerHTML = h + '<div class="card"><div class="card-b empty">A két tételjegyzék tartalma megegyezik.</div></div>'; return; }
+    if (st.rev.status === 'err') h += `<p class="neg-t small">Az összefoglaló nem készült el: ${esc(st.rev.error)} <button class="btn btn-sm" id="btn-rev-retry">Újra</button></p>`;
+    h += `<div class="card"><div class="tbl-wrap"><table class="rev"><thead><tr><th>Tétel</th><th>Változás a tételjegyzékben<br><span class="faint"><del>törölt</del> <ins>új</ins> szöveg</span></th><th>Mi változott</th><th>A program az eredeti kiírásnál</th></tr></thead><tbody>`;
+    let lastPart = null;
+    for (const c of ch) {
+      if (c.part !== lastPart) { lastPart = c.part; h += `<tr class="zone-row"><td colspan="4">${esc(c.part)}</td></tr>`; }
+      const it = c.old || c.new, a = ai[c.id], fl = c.kind === 'changed' ? earlierFlags(c.id) : [];
+      let body = '';
+      if (c.kind === 'added') body = `<span class="badge ok">Új tétel</span> ${esc(c.new.spec)} <b>${fmt(c.new.qty)} ${esc(c.new.unit)}</b>`;
+      else if (c.kind === 'removed') body = `<span class="badge neg">Törölt tétel</span> <span class="faint">${esc(c.old.spec)}</span>`;
+      else {
+        if (c.fields.includes('name')) body += `<div><b>Megnevezés:</b> ${diffHtml(c.old.name, c.new.name)}</div>`;
+        if (c.fields.includes('qty') || c.fields.includes('unit')) body += `<div><b>Mennyiség:</b> <del>${fmt(c.old.qty)} ${esc(c.old.unit)}</del> <ins>${fmt(c.new.qty)} ${esc(c.new.unit)}</ins></div>`;
+        if (c.fields.includes('spec')) body += `<div class="dspec">${diffHtml(c.old.spec, c.new.spec)}</div>`;
+      }
+      h += `<tr><td class="code">${esc(c.id)}<span class="src">${it.row}. sor</span></td>
+        <td><b>${esc(it.name)}</b>${body}</td>
+        <td>${a ? `<span class="badge ${IMPACT[a.arat_erinti].cls}">${IMPACT[a.arat_erinti].label}</span><p class="rv-w">${esc(a.mi_valtozott)}</p><p class="muted small">${esc(a.indok)}</p>` : (st.rev.status === 'run' ? '<span class="spin"></span>' : '')}</td>
+        <td>${fl.length ? `<span class="badge warn">Jelezte</span>${fl.map(x => `<div class="muted small">${esc(x)}</div>`).join('')}` : (Object.keys(st.ai).length && c.kind === 'changed' ? '<span class="faint small">Nem jelezte</span>' : '')}</td></tr>`;
+    }
+    h += `</tbody></table></div></div>`;
+    el.innerHTML = h;
+  }
+  async function setRevision(file) {
+    if (!st.book || st.revReading) return;
+    st.revReading = true; st.rev = null; render();
+    try {
+      // Az eredeti oszlopkiosztást használjuk, ha a fejléc ugyanaz, hogy a két változat összevethető legyen.
+      const preset = {}; st.book.parts.forEach(p => { if (p.col) preset[p.sheet] = { header: p.header, col: p.col, hr: p.hr }; });
+      const book = await Parse.readWorkbook(await file.arrayBuffer(), file.name, sheets => api('columns', { sheets }), preset);
+      if (!book.items.length) throw new Error('A módosított fájlban nem találtam tételjegyzéket.');
+      st.rev = { fileName: file.name, book, changes: Diff.compareBooks(st.book, book), ai: {}, status: 'idle', error: '' };
+    } catch (e) { alert(e.message); }
+    st.revReading = false; render();
+    if (st.rev) summarizeRevision();
+  }
+  async function summarizeRevision() {
+    const list = st.rev.changes.filter(c => c.kind === 'changed');
+    if (!list.length) return;
+    st.rev.status = 'run'; st.rev.error = ''; render();
+    const chunks = [];
+    for (let i = 0; i < list.length; i += 6) chunks.push(list.slice(i, i + 6));
+    try {
+      await Promise.all(chunks.map(async ch => {
+        const out = await api('revision', { changes: ch.map(c => ({ id: c.id, name: c.old.name, before: `${c.old.name} | ${c.old.qty} ${c.old.unit} | ${c.old.spec}`, after: `${c.new.name} | ${c.new.qty} ${c.new.unit} | ${c.new.spec}` })) });
+        out.valtozasok.forEach(v => { if (IMPACT[v.arat_erinti]) st.rev.ai[v.id] = v; });
+        render();
+      }));
+      st.rev.status = 'ok';
+    } catch (e) { st.rev.status = 'err'; st.rev.error = e.message; }
+    render();
+  }
+
   /* ---------- feldolgozás ---------- */
   async function api(path, body) {
     for (;;) {
@@ -378,7 +492,7 @@
       if (kind === 'sheet') {
         st.files.sheet = file; st.book = null; st.detecting = true; render();
         try { st.book = await Parse.readWorkbook(await file.arrayBuffer(), file.name, sheets => api('columns', { sheets })); } finally { st.detecting = false; }
-        st.ai = {}; st.tender = null; st.partStatus = {}; st.tenderStatus = 'idle'; st.elapsedMs = 0;
+        st.ai = {}; st.tender = null; st.rev = null; st.partStatus = {}; st.tenderStatus = 'idle'; st.elapsedMs = 0;
         if (!st.book.items.length) { alert('Ebben a táblázatban nem találtam tételjegyzéket.' + (st.book.aiError ? ' (' + st.book.aiError + ')' : '')); st.book = null; st.files.sheet = null; }
       } else {
         const list = Array.isArray(file) ? file : [file];
@@ -398,14 +512,16 @@
     st.doc = { fileName: docs.map(d => d.fileName).join(' + '), text: Parse.combineDocs(docs) };
     st.files.doc = { name: st.doc.fileName }; st.docIndex = Parse.makeDocIndex(st.doc.text);
   }
-  async function loadSample() {
-    const get = async (url, name) => new File([await (await fetch(url)).blob()], name);
-    await setFile('sheet', await get('minta/debrecen_artablazatok.xls', 'Ártáblázatok_1_10.xls'));
-    await setFile('doc', await get('minta/debrecen_kozbeszerzesi_dok.docx', 'Közbeszerzési dok_1_10.docx'));
+  const getFile = async (url, name) => new File([await (await fetch(url)).blob()], name);
+  async function loadSample(key) {
+    const S = SAMPLES[key]; if (!S || st.running) return;
+    st = fresh(); st.sample = key; render();
+    await setFile('sheet', await getFile(S.sheet[0], S.sheet[1]));
+    await setFile('doc', await Promise.all(S.docs.map(d => getFile(d[0], d[1]))));
   }
-  function snapshot() { return { v: 1, savedAt: new Date().toISOString(), book: st.book, doc: st.doc, docs: st.docs, ai: st.ai, tender: st.tender, elapsedMs: st.elapsedMs, model: st.model }; }
+  function snapshot() { return { v: 1, savedAt: new Date().toISOString(), sample: st.sample, book: st.book, doc: st.doc, docs: st.docs, ai: st.ai, tender: st.tender, rev: st.rev, elapsedMs: st.elapsedMs, model: st.model }; }
   function restore(s) {
-    st = fresh(); Object.assign(st, { book: s.book, doc: s.doc, ai: s.ai, tender: s.tender, elapsedMs: s.elapsedMs, model: s.model, fromSaved: true });
+    st = fresh(); Object.assign(st, { sample: s.sample || '', rev: s.rev || null, book: s.book, doc: s.doc, ai: s.ai, tender: s.tender, elapsedMs: s.elapsedMs, model: s.model, fromSaved: true });
     st.files = { sheet: { name: s.book.fileName }, doc: s.doc ? { name: s.doc.fileName } : null };
     st.docs = s.docs || (s.doc ? [s.doc] : []);
     st.docIndex = s.doc ? Parse.makeDocIndex(s.doc.text) : null;
@@ -413,7 +529,7 @@
     st.tab = 'osszefoglalo'; render();
   }
   root.App.snapshot = snapshot; root.App.rfqText = rfqText; root.App.questionsText = () => (st.tender ? questionsText() : '');
-  root.App.helpers = { items, makerOf, notesOf, dims, counts, NOTE_TYPES, SEV, FIND_TYPES };
+  root.App.helpers = { items, makerOf, notesOf, dims, counts, earlierFlags, NOTE_TYPES, SEV, FIND_TYPES, IMPACT };
 
   /* ---------- események ---------- */
   const copy = (text, btn) => navigator.clipboard.writeText(text).then(() => { const t = btn.textContent; btn.textContent = 'Kimásolva'; setTimeout(() => { btn.textContent = t; }, 1500); });
@@ -422,7 +538,9 @@
     if (t.dataset.tab) { st.tab = t.dataset.tab; render(); window.scrollTo(0, 0); }
     else if (t.classList.contains('q-open')) openSource(t.dataset);
     else if (t.id === 'btn-run') run();
-    else if (t.id === 'btn-sample') loadSample();
+    else if (t.dataset.sample) loadSample(t.dataset.sample);
+    else if (t.id === 'btn-rev-sample') { const S = SAMPLES[st.sample]; getFile(S.rev[0], S.rev[1]).then(setRevision); }
+    else if (t.id === 'btn-rev-retry') summarizeRevision();
     else if (t.id === 'btn-saved') fetch('data/mentett.json').then(r => r.json()).then(restore).catch(() => alert('A mentett eredmény nem tölthető be.'));
     else if (t.id === 'btn-new') { if (!st.running) { st = fresh(); render(); } }
     else if (t.dataset.retry) retry(t.dataset.retry);
@@ -431,7 +549,7 @@
   });
   document.addEventListener('change', e => {
     const t = e.target;
-    if (t.type === 'file' && t.files[0]) { const k = t.closest('.drop').dataset.kind; setFile(k, k === 'doc' ? [...t.files] : t.files[0]); }
+    if (t.type === 'file' && t.files[0]) { const k = t.closest('.drop').dataset.kind; if (k === 'rev') setRevision(t.files[0]); else { if (k === 'sheet') st.sample = ''; setFile(k, k === 'doc' ? [...t.files] : t.files[0]); } }
     else if (t.dataset.maker) { st.ai[t.dataset.maker].gyarto = t.value; st.ai[t.dataset.maker].gyarto_indok = 'Kézzel átállítva.'; render(); }
     else if (t.id === 'f-part') { st.filter.part = t.value; render(); }
     else if (t.id === 'f-maker') { st.filter.maker = t.value; render(); }
@@ -440,7 +558,10 @@
   ['dragover', 'drop'].forEach(ev => document.addEventListener(ev, e => {
     const d = e.target.closest && e.target.closest('.drop'); if (!d) return;
     e.preventDefault();
-    if (ev === 'drop' && e.dataTransfer.files[0]) setFile(d.dataset.kind, d.dataset.kind === 'doc' ? [...e.dataTransfer.files] : e.dataTransfer.files[0]);
+    if (ev === 'drop' && e.dataTransfer.files[0]) {
+      if (d.dataset.kind === 'rev') setRevision(e.dataTransfer.files[0]);
+      else { if (d.dataset.kind === 'sheet') st.sample = ''; setFile(d.dataset.kind, d.dataset.kind === 'doc' ? [...e.dataTransfer.files] : e.dataTransfer.files[0]); }
+    }
   }));
   // Ctrl+Shift+S: a feldolgozott eredmény mentése JSON-ba (ebből lesz a data/mentett.json tartalék).
   document.addEventListener('keydown', e => {

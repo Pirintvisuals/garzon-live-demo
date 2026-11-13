@@ -79,3 +79,21 @@ button.q-src:hover { background: #d5ebdd; text-decoration: underline; }
 .modal-b mark { background: #ffe9a8; padding: 1px 0; }
 .modal-f { padding: 8px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
 .drop-i { margin-top: 6px; font-size: 12px; color: var(--muted); }
+
+/* Revízió */
+table.rev td { font-size: 12.5px; }
+table.rev td:nth-child(2) { min-width: 380px; }
+table.rev td:nth-child(3) { min-width: 220px; max-width: 320px; }
+table.rev td:nth-child(4) { min-width: 160px; max-width: 240px; }
+table.rev td:nth-child(2) > div { margin-top: 5px; }
+table.rev del { background: var(--neg-bg); color: var(--neg); text-decoration: line-through; padding: 0 1px; border-radius: 2px; }
+table.rev ins, .view-head ins { background: var(--ok-bg); color: var(--ok); text-decoration: none; font-weight: 500; padding: 0 1px; border-radius: 2px; }
+th del, th ins { font-weight: 500; }
+th del { background: var(--neg-bg); color: var(--neg); }
+th ins { background: var(--ok-bg); color: var(--ok); text-decoration: none; }
+.dspec { line-height: 1.6; }
+.dq { color: var(--muted); }
+.gap { display: inline-block; margin: 0 4px; padding: 0 5px; border-radius: 3px; background: #eceef0; color: var(--faint); font-size: 11px; }
+.rv-w { margin: 5px 0 2px; font-weight: 500; }
+td p.small { margin: 2px 0 0; }
+#btn-rev-sample { text-align: left; white-space: normal; line-height: 1.4; }

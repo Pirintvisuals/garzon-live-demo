@@ -41,6 +41,16 @@
     all.forEach(it => H.notesOf(it).forEach(n => checks.push([H.NOTE_TYPES[n.tipus] || '', '', it.name, n.szoveg, n.idezet, it.id])));
     XLSX.utils.book_append_sheet(wb, sheet(checks, [32, 11, 40, 70, 60, 20]), 'Ellenőrizendő');
     if (t) XLSX.utils.book_append_sheet(wb, sheet([['#', 'Kérdés', 'Miért kell', 'Érintett tételek'], ...t.kerdesek.map((q, n) => [n + 1, q.kerdes.replace(/^\s*Tisztelt\s+[^!,.]{0,40}[!,.]\s*/i, ''), q.miert, q.erintett_tetelek.join(', ')])], [4, 90, 60, 20]), 'Kérdések');
+    if (st.rev && st.rev.changes.length) {
+      const KIND = { changed: 'Módosult', added: 'Új tétel', removed: 'Törölt tétel' };
+      const rows = st.rev.changes.map(c => {
+        const a = st.rev.ai[c.id] || {}, o = c.old || {}, n = c.new || {};
+        return [c.id, c.part, (c.old || c.new).name, KIND[c.kind], a.mi_valtozott || '', a.arat_erinti ? H.IMPACT[a.arat_erinti].label : '',
+          o.qty != null ? o.qty : '', n.qty != null ? n.qty : '', o.spec || '', n.spec || '', c.kind === 'changed' ? H.earlierFlags(c.id).join(' | ') : ''];
+      });
+      XLSX.utils.book_append_sheet(wb, sheet([['Tétel', 'Rész', 'Megnevezés', 'Változás', 'Mi változott', 'Árhatás', 'Régi menny.', 'Új menny.', 'Régi leírás', 'Új leírás', 'A program az eredetinél jelezte'], ...rows],
+        [8, 20, 26, 12, 50, 16, 10, 10, 60, 60, 50]), 'Revízió');
+    }
     XLSX.writeFile(wb, 'ajanlatkeres_elokeszites.xlsx');
   }
   document.getElementById('btn-xlsx').addEventListener('click', build);
