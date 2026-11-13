@@ -15,7 +15,7 @@ function guard(req, res) {
 
 async function gemini({ system, user, schema, maxOutputTokens = 32000 }) {
   // A beállított modellnév tisztítása ("Gemini 2.5 Pro", "models/gemini-2.5-pro" is működjön); hibás névnél az alapértelmezett.
-  const DEFAULT_MODEL = 'gemini-2.5-pro';
+  const DEFAULT_MODEL = 'gemini-3.1-pro-preview';
   let model = String(process.env.GEMINI_MODEL || '').trim().toLowerCase().replace(/^models\//, '').replace(/\s+/g, '-');
   if (!/^gemini-[a-z0-9.-]+$/.test(model)) model = DEFAULT_MODEL;
   const body = {
