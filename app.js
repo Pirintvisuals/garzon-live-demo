@@ -325,8 +325,15 @@
   async function runPart(p) {
     st.partStatus[p.no] = 'run'; render();
     try {
-      const out = await api('items', { part: p.name, items: p.items.map(i => ({ id: i.id, name: i.name, spec: i.spec, qty: i.qty, unit: i.unit })) });
-      for (const t of out.tetelek) if (itemById(t.id)) st.ai[t.id] = t;
+      // Nagy részt 10 tételes adagokban, párhuzamosan értelmezünk, hogy alaposabb és gyorsabb legyen.
+      const chunks = [];
+      for (let i = 0; i < p.items.length; i += 10) chunks.push(p.items.slice(i, i + 10));
+      let out;
+      await Promise.all(chunks.map(async ch => {
+        out = await api('items', { part: p.name, items: ch.map(i => ({ id: i.id, name: i.name, spec: i.spec, qty: i.qty, unit: i.unit })) });
+        for (const t of out.tetelek) if (itemById(t.id)) st.ai[t.id] = t;
+        render();
+      }));
       const missing = p.items.filter(i => !st.ai[i.id]).length;
       if (missing) throw new Error(missing + ' tételre nem érkezett értelmezés.');
       st.model = out.model; st.partStatus[p.no] = 'ok';

@@ -24,7 +24,15 @@ Szabályok:
   "hiany" = árazáshoz szükséges adat hiányzik (méret, anyag, vastagság, szín, mennyiségi egység).
   "pontatlan" = elírás, értelmezhetetlen vagy kétértelmű megfogalmazás.
   Minden észrevételhez adjon "idezet" mezőt: egyetlen összefüggő, szó szerinti, változtatás nélküli részlet a tétel szövegéből (legfeljebb 120 karakter). Kihagyást ("...", "[...]") ne használjon, két külön szövegrészt ne fűzzön össze. Hiány esetén az idezet lehet üres.
-- Egy tételhez legfeljebb 2 észrevétel, csak az, ami nélkül az árajánlatadó nem tud felelősen árazni, vagy ami félreértéshez vezethet.
+- Minden tételnél végezze el ezeket az ellenőrzéseket, és ami hibát ad, azt jelezze:
+  a) A megnevezés és a leírás ugyanazt a terméket írja-e le (például a megnevezés fotel, a leírás 3 személyes kanapé).
+  b) A leírás különböző részei, illetve a leírás és a szín/anyag oszlop ellentmondanak-e egymásnak (például a leírás tölgyfa lécet, a szín WPC-t ír; a leírás két anyagot enged, a szín csak egyet).
+  c) A méretek fizikailag összeférnek-e a kialakítással (például 70 cm szélességbe 3 oszlop műanyag fiók nem fér el; a megadott magasságba nem fér el a kért számú polc vagy iratrendező).
+  d) Van-e nyilvánvaló mértékegység-elírás (cm és mm felcserélése, irreális méret).
+  e) A mennyiség egyértelmű-e, ha a tétel készlet, szett vagy több főre szóló összeállítás (hány darabot jelent 1 egység).
+  f) Hivatkozik-e a leírás olyan mellékletre, rajzra, képre, amely nélkül a tétel nem árazható.
+- Egy tételhez legfeljebb 3 észrevétel, csak az, ami nélkül az árajánlatadó nem tud felelősen árazni, vagy ami félreértéshez vezethet. A fenti a) - f) típusú hibák fontosabbak, mint egy hiányzó adat.
+- NEM észrevétel: a lapanyag vastagságának hiánya, ha a kiírás terméket kér és nem gyártmánytervet; a mennyiségi egység hiánya, ha a darabszám egyértelmű.
 - NEM észrevétel: iskolabútornál a korcsoport megadása a méretet helyettesíti (ne jelezze hiányként a szék vagy asztal méretét, ha korcsoport szerepel); az állítható méret (tartomány) nem pontatlanság; kereskedelmi terméknél (beszállítói) a részletes szerkezeti adat hiánya nem gond. A méret megjegyzésbe ne ismételje meg az észrevételt.
 - Ha a tétel leírása rendben van, az eszrevetelek üres tömb.
 - A válasz nyelve magyar. Minden kapott tételhez pontosan egy elemet adjon vissza, ugyanazzal az id-val.`;
@@ -65,10 +73,10 @@ module.exports = async (req, res) => {
   try {
     const { part, items } = req.body || {};
     if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'Nincs tétel a kérésben.' });
-    if (items.length > 80) return res.status(400).json({ error: 'Egy kérésben legfeljebb 80 tétel küldhető.' });
+    if (items.length > 40) return res.status(400).json({ error: 'Egy kérésben legfeljebb 80 tétel küldhető.' });
     const user = 'Rész: ' + (part || '') + '\n\nTételek (JSON):\n' +
       JSON.stringify(items.map(i => ({ id: i.id, megnevezes: i.name, leiras: i.spec, mennyiseg: i.qty, egyseg: i.unit })), null, 1);
-    const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, thinking: 'low' });
+    const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, thinking: 'medium' });
     res.status(200).json({ tetelek: out.data.tetelek || [], model: out.model, usage: out.usage });
   } catch (e) {
     res.status(502).json({ error: String(e.message || e) });

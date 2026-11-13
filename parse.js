@@ -39,6 +39,9 @@
     // Oszlopcímke a leíráshoz: a fejléc első sora, zárójel és magyarázat nélkül (a kiírások fejléce gyakran egész bekezdés).
     const header = (rows[hr] || []).map(h => clean(String(h == null ? '' : h).split(/\r?\n/)[0].split(' (')[0].split(':')[0]).slice(0, 30));
     const specCols = (col.specs || []).filter(c => c >= 0 && c !== col.name && c !== col.qty && c !== col.unit && c !== col.no);
+    // Ha nincs külön egység oszlop, de a mennyiség oszlop fejléce maga az egység ("db", "fm"), azt használjuk.
+    const qh = clean((rows[hr] || [])[col.qty]).toLowerCase();
+    const qtyUnit = /^(db|darab|fm|m2|m²|m|klt|készlet|garnitúra|szett)$/.test(qh) ? qh : '';
     const items = [];
     for (let r = hr + 1; r < rows.length; r++) {
       const row = rows[r] || [];
@@ -52,7 +55,7 @@
       items.push({
         id: partNo + '/' + (no || items.length + 1),
         partNo, part: clean(sheetName), sheet: sheetName, row: r + 1, no: no || String(items.length + 1),
-        name, spec, qty, unit: col.unit >= 0 ? clean(row[col.unit]) : ''
+        name, spec, qty, unit: col.unit >= 0 ? clean(row[col.unit]) : qtyUnit
       });
     }
     // Azonos kód kétszer: a sorszámmal tesszük egyedivé.
