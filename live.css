@@ -217,3 +217,6 @@ table.price td:first-child { min-width: 220px; }
 .cm-sum span { color: var(--muted); font-size: 12px; }
 .cm-sum ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; font-size: 12.5px; }
 .cm.cq { width: max-content; max-width: 85%; margin-left: auto; overflow-wrap: break-word; align-self: auto; }
+.credit-box { max-width: 460px; }
+.credit-box .modal-b p { padding-left: 0; }
+.credit-f { display: flex; justify-content: flex-end; gap: 8px; }

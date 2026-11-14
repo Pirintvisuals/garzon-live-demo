@@ -50,7 +50,8 @@ module.exports = async (req, res) => {
     const stable = (doc ? 'AZ AJÁNLATKÉRÉS DOKUMENTUMAI:\n"""\n' + doc + '\n"""\n\n' : 'Szöveges dokumentum nincs feltöltve, csak a tételjegyzék.\n\n') +
       'TÉTELJEGYZÉK (soronként: [id] rész | megnevezés | mennyiség | leírás):\n' + list;
     const user = (prev ? '\n\nA BESZÉLGETÉS EDDIG:\n' + prev : '') + '\n\nA KOLLÉGA KÉRDÉSE: ' + q;
-    const out = await gemini({ system: SYSTEM, stable, user, schema: SCHEMA, thinking: 'low', maxOutputTokens: 4000 });
+    // A csevegés olcsóbb, gyorsabb modellel fut (Gemini Flash); Claude esetén a gyors modell dolgozik.
+    const out = await gemini({ system: SYSTEM, stable, user, schema: SCHEMA, thinking: 'low', maxOutputTokens: 4000, modelOverride: process.env.GEMINI_CHAT_MODEL || 'gemini-3-flash-preview' });
     res.status(200).json({ ...out.data, model: out.model });
   } catch (e) {
     res.status(502).json({ error: String(e.message || e) });

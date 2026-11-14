@@ -615,7 +615,32 @@
   // A jelszót a böngésző megjegyzi, így ezen a gépen csak egyszer kell megadni.
   const getKey = () => { try { return localStorage.getItem('demoKey') || sessionStorage.getItem('demoKey') || ''; } catch (e) { return ''; } };
   const setKey = v => { try { localStorage.setItem('demoKey', v); } catch (e) { try { sessionStorage.setItem('demoKey', v); } catch (e2) { /* nincs tároló */ } } };
+  // Minden élő (API-kreditet használó) hívás előtt egyszer megerősítést kérünk böngésző-munkamenetenként.
+  // A beépített minta visszajátszása nem hívja ezt a függvényt, így nem kérdez és nem fogyaszt.
+  let creditAsk = null;
+  const creditOk = () => { try { return sessionStorage.getItem('creditOk') === '1'; } catch (e) { return false; } };
+  function confirmCredit() {
+    if (creditOk()) return Promise.resolve(true);
+    if (creditAsk) return creditAsk;
+    creditAsk = new Promise(resolve => {
+      const m = document.createElement('div');
+      m.className = 'modal';
+      m.innerHTML = `<div class="modal-box credit-box"><div class="modal-h"><h3>Élő feldolgozás: API-kreditet használ</h3></div>
+        <div class="modal-b"><p>Ez a lépés a mesterséges intelligenciát hívja, ami a fiók API-keretéből fogyaszt.</p>
+        <p class="muted">A beépített szegedi minta és a javasolt kérdések ingyenesek, azokhoz nem kell ez.</p></div>
+        <div class="modal-f credit-f"><button class="btn" data-credit="no">Mégse</button><button class="btn btn-primary" data-credit="yes">Folytatás</button></div></div>`;
+      m.addEventListener('click', e => {
+        const b = e.target.closest('[data-credit]'); if (!b) return;
+        const yes = b.dataset.credit === 'yes';
+        if (yes) { try { sessionStorage.setItem('creditOk', '1'); } catch (e2) { /* nincs tároló */ } }
+        m.remove(); creditAsk = null; resolve(yes);
+      });
+      document.body.appendChild(m);
+    });
+    return creditAsk;
+  }
   async function api(path, body) {
+    if (!(await confirmCredit())) throw new Error('Megszakítva: az élő feldolgozás nem lett engedélyezve.');
     for (;;) {
       const r = await fetch('/api/' + path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-demo-key': getKey() }, body: JSON.stringify(body) });
       if (r.status === 401) {
