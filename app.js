@@ -512,8 +512,10 @@
 
   /* ---------- Árazás: első árvázlat tételtípusonként, mintaárakkal (pricing.js) ---------- */
   const ft = n => Math.round(n).toLocaleString('hu-HU') + ' Ft';
-  const priced = () => items().map(it => ({ it, p: Pricing.priceItem(it, st.ai[it.id], notesOf(it), st.pricing.margin, st.pricing.risk) }));
-  const priceOf = it => { const p = Pricing.priceItem(it, st.ai[it.id], notesOf(it), st.pricing.margin, st.pricing.risk); return p.unit ? { avg: p.unit } : null; };
+  // Az árazás csak a legalább 50%-os (vagy valószínűség nélküli) észrevételeket veszi ellentmondásnak; a hiányzó adat mindig számít.
+  const priceNotes = it => notesOf(it).filter(n => n.tipus === 'hiany' || !Number.isFinite(n.valoszinuseg) || n.valoszinuseg >= 50);
+  const priced = () => items().map(it => ({ it, p: Pricing.priceItem(it, st.ai[it.id], priceNotes(it), st.pricing.margin, st.pricing.risk) }));
+  const priceOf = it => { const p = Pricing.priceItem(it, st.ai[it.id], priceNotes(it), st.pricing.margin, st.pricing.risk); return p.unit ? { avg: p.unit } : null; };
   function calcHtml(p) {
     if (p.type === 'gyartott') {
       return `<div class="calc"><table class="compact"><thead><tr><th>Anyag és munka</th><th class="num">Menny.</th><th class="num">Egységár</th><th class="num">Érték</th></tr></thead><tbody>
