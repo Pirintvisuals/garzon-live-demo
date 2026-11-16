@@ -93,11 +93,8 @@
   function renderChrome() {
     const c = counts();
     $('#tabs').innerHTML = TABS.map(t => {
-      let cnt = '';
-      if (t.id === 'tetelek' && c.items) cnt = `<span class="cnt">${c.items}</span>`;
-      if (t.id === 'ellenorzes' && (c.errors + c.findings)) cnt = `<span class="cnt warn">${c.errors + c.findings}</span>`;
-      if (t.id === 'kerdesek' && c.questions) cnt = `<span class="cnt">${c.questions}</span>`;
-      if (t.id === 'revizio' && st.rev) cnt = `<span class="cnt warn">${st.rev.changes.length}</span>`;
+      // A füleken csak a lépés sorszáma látszik; a darabszámok az oldalakon vannak (két szám egymás mellett összezavaró volt).
+      const cnt = '';
       const disabled = t.id !== 'feltoltes' && !st.book;
       return `<button class="tab" role="tab" data-tab="${t.id}" style="--sec:${SEC[t.id]}" aria-selected="${st.tab === t.id}" ${disabled ? 'disabled' : ''}><span class="tn">${TABS.indexOf(t) + 1}</span>${t.label}${cnt}</button>`;
     }).join('');
@@ -658,7 +655,7 @@
     box.innerHTML = `<div class="chat-panel" role="dialog" aria-label="Kérdezzen a kiírásról">
       <div class="chat-h"><div><b>Kérdezzen a kiírásról</b><span>Csak a feltöltött fájlokból válaszol, forrással.</span></div><button class="btn btn-sm" id="chat-close">Bezárás</button></div>
       <div class="chat-b" id="chat-b">${c.msgs.length ? c.msgs.map(chatMsgHtml).join('') : `<div class="chat-empty">Tegyen fel kérdést a szerződésről, a feltételekről vagy a tételekről. Például:</div>`}
-        ${c.msgs.length ? '' : `<div class="chat-sugg">${CHAT_SUGG.map(q => `<button class="chip" data-chatq="${esc(q)}">${esc(q)}</button>`).join('')}</div>`}</div>
+        ${(() => { const left = CHAT_SUGG.filter(q => !c.msgs.some(m => m.q === q)); return left.length && !busy ? `<div class="chat-sugg">${c.msgs.length ? '<div class="chat-empty small">További kérdések:</div>' : ''}${left.map(q => `<button class="chip" data-chatq="${esc(q)}">${esc(q)}</button>`).join('')}</div>` : ''; })()}</div>
       <div class="chat-f"><input id="chat-in" type="text" maxlength="400" placeholder="Írja be a kérdését…" autocomplete="off" ${busy ? 'disabled' : ''}><button class="btn btn-primary" id="chat-send" ${busy ? 'disabled' : ''}>Küldés</button></div></div>`;
     const inp = box.querySelector('#chat-in'); inp.value = c.draft || '';
     if (focused || c.focus) { inp.focus(); c.focus = false; }
