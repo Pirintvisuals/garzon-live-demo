@@ -220,3 +220,20 @@ table.price td:first-child { min-width: 220px; }
 .credit-box { max-width: 460px; }
 .credit-box .modal-b p { padding-left: 0; }
 .credit-f { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Eredeti fájlok megnyitása */
+.opn { appearance: none; border: 1px solid var(--accent); background: var(--surface); color: var(--accent-ink); border-radius: 3px; font: 500 11.5px var(--sans); padding: 1px 7px; margin-left: 6px; cursor: pointer; }
+.opn:hover { background: var(--accent-soft); }
+button.q-inline { appearance: none; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font: italic 12px var(--sans); color: var(--muted); display: block; margin-top: 2px; }
+button.q-inline:hover { color: var(--accent-ink); }
+.q-go { font-style: normal; font-size: 11px; color: var(--ok); background: var(--ok-bg); border-radius: 3px; padding: 0 5px; margin-left: 4px; white-space: nowrap; }
+.modal-box.wide { max-width: 1200px; }
+.mf-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sv-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sv-wrap { overflow: auto; max-height: 62vh; border: 1px solid var(--border); border-radius: 4px; }
+table.sv { font-size: 12px; border-collapse: collapse; }
+table.sv th { position: sticky; left: 0; background: var(--surface-2); color: var(--faint); font: 11px var(--mono); padding: 4px 6px; border-right: 1px solid var(--border); }
+table.sv td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: top; min-width: 60px; max-width: 420px; white-space: pre-wrap; }
+table.sv tr.sv-hit td { background: #fff3c4; }
+table.sv tr.sv-hit th { background: #ffe9a8; color: var(--text); }

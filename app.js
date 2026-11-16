@@ -164,13 +164,13 @@
       <label class="drop ${f.sheet ? 'has' : ''}" data-kind="sheet"><input type="file" accept=".xls,.xlsx,.xlsm,.csv" hidden>
         <div class="drop-t">1. Tételjegyzék (Excel)</div>
         <div class="drop-h">Az ajánlatkérő táblázata arról, mit kér és hány darabot. Az ároszlopok üresek: azokat kell majd kitölteni az ajánlathoz.</div>
-        <div class="drop-f">${f.sheet ? esc(f.sheet.name) + (st.running ? '' : ' <button class="rm" data-remove="sheet" title="Fájl eltávolítása">Eltávolítás</button>') : 'Húzza ide, vagy kattintson (.xls, .xlsx)'}</div>
+        <div class="drop-f">${f.sheet ? esc(f.sheet.name) + (st.book ? ` <button class="opn" data-open-sheet="${esc(st.book.parts[0].sheet)}" title="A táblázat megnyitása">Megnyitás</button>` : '') + (st.running ? '' : ' <button class="rm" data-remove="sheet" title="Fájl eltávolítása">Eltávolítás</button>') : 'Húzza ide, vagy kattintson (.xls, .xlsx)'}</div>
         ${st.detecting ? '<div class="drop-s"><span class="spin"></span> A táblázat szerkezetének felismerése…</div>' : ''}
         ${st.book ? `<div class="drop-s">${st.book.sheetCount} munkalap, ebből ${c.parts} tartalmaz tételeket · ${c.items} tétel · ${esc(qtyText(items()))}</div>${st.book.usedAi ? colInfo() : ''}` : ''}</label>
       <label class="drop ${f.doc ? 'has' : ''}" data-kind="doc"><input type="file" accept=".pdf,.docx,.txt" multiple hidden>
         <div class="drop-t">2. Feltételek (PDF vagy Word)</div>
         <div class="drop-h">A kiírás, a műszaki leírás, a szerződéstervezet: határidő, fizetés, kötbér, jótállás. Nem kötelező, de ebből lesz a vezetői összefoglaló.</div>
-        <div class="drop-f">${st.docs.length ? st.docs.map(d => `<div>${esc(d.fileName)}${st.running ? '' : ` <button class="rm" data-remove="doc" data-name="${esc(d.fileName)}" title="Fájl eltávolítása">Eltávolítás</button>`}</div>`).join('') : 'Húzza ide, vagy kattintson (.pdf, .docx), több fájl is lehet'}</div>
+        <div class="drop-f">${st.docs.length ? st.docs.map(d => `<div>${esc(d.fileName)} <button class="opn" data-open-doc="${esc(d.fileName)}" title="A dokumentum megnyitása">Megnyitás</button>${st.running ? '' : ` <button class="rm" data-remove="doc" data-name="${esc(d.fileName)}" title="Fájl eltávolítása">Eltávolítás</button>`}</div>`).join('') : 'Húzza ide, vagy kattintson (.pdf, .docx), több fájl is lehet'}</div>
         ${st.reading ? `<div class="drop-s"><span class="spin"></span> ${esc(st.reading)}</div>` : ''}
         ${st.doc ? `<div class="drop-s">${st.docs.length} dokumentum · ${st.docIndex.paras.length.toLocaleString('hu-HU')} bekezdés${st.docs.some(d => d.scanned) ? ' · szkennelt PDF szövegfelismeréssel' : ''}</div>${st.docs.filter(d => d.failedPages && d.failedPages.length).map(d => `<div class="drop-i">${esc(d.fileName)}: ${d.failedPages.length} oldal nem volt olvasható (${d.failedPages.join(', ')}. oldal).</div>`).join('')}` : ''}</label>
     </div>`;
@@ -307,10 +307,54 @@
       title = `${esc(st.book.fileName)} · ${esc(it.sheet)} munkalap · ${it.row}. sor`;
       body = `<table class="compact"><thead><tr><th>Ssz.</th><th>Megnevezés</th><th>Leírás</th><th class="num">Mennyiség</th></tr></thead><tbody><tr><td>${esc(it.no)}</td><td>${mark(it.name, d.quote).replace(/^<mark>(.*)<\/mark>$/, '$1')}</td><td>${mark(it.spec, d.quote).replace(/^<mark>(.*)<\/mark>$/, '$1')}</td><td class="num">${fmt(it.qty)} ${esc(it.unit)}</td></tr></tbody></table>`;
     } else return;
+    // Gomb az eredeti fájlhoz: a táblázat sora kiemelve, illetve a PDF a megfelelő oldalon.
+    let open = '';
+    if (d.item) { const it = itemById(d.item); open = `<button class="btn btn-sm" data-open-sheet="${esc(it.sheet)}" data-row="${it.row}">Megnyitás a teljes táblázatban</button>`; }
+    else { const mt = (st.docIndex.meta && st.docIndex.meta[Number(d.para) - 1]) || {}; if (mt.file) open = `<button class="btn btn-sm" data-open-doc="${esc(mt.file)}" data-page="${mt.page || ''}">Megnyitás az eredeti dokumentumban${mt.page ? ' (' + mt.page + '. oldal)' : ''}</button>`; }
+    showModal(title, body, `<span>Ez a feltöltött fájl eredeti szövege, változtatás nélkül.</span>${open}`);
+  }
+  function showModal(title, body, foot, wide) {
     const m = document.createElement('div');
-    m.className = 'modal'; m.innerHTML = `<div class="modal-box"><div class="modal-h"><h3>${title}</h3><button class="btn btn-sm" data-close>Bezárás</button></div><div class="modal-b">${body}</div><div class="modal-f">Ez a feltöltött fájl eredeti szövege, változtatás nélkül.</div></div>`;
+    m.className = 'modal'; m.innerHTML = `<div class="modal-box${wide ? ' wide' : ''}"><div class="modal-h"><h3>${title}</h3><button class="btn btn-sm" data-close>Bezárás</button></div><div class="modal-b">${body}</div><div class="modal-f mf-row">${foot || ''}</div></div>`;
     m.addEventListener('click', e => { if (e.target === m || e.target.closest('[data-close]')) m.remove(); });
     document.body.appendChild(m);
+    return m;
+  }
+
+  /* ---------- az eredeti, feltöltött fájlok megnyitása ---------- */
+  // A fájlok a böngészőben maradnak (nem kerülnek a mentett eredménybe); a mintánál szükség esetén újra letöltjük.
+  const rawFiles = {};
+  async function getRaw(name) {
+    if (rawFiles[name]) return rawFiles[name];
+    for (const k of Object.keys(SAMPLES)) {
+      const S = SAMPLES[k], list = [S.sheet, ...(S.docs || []), S.rev].filter(Boolean);
+      const hit = list.find(x => x[1] === name);
+      if (hit) { rawFiles[name] = await getFile(hit[0], hit[1]); return rawFiles[name]; }
+    }
+    return null;
+  }
+  async function openSheet(sheetName, row) {
+    const f = await getRaw(st.book.fileName);
+    if (!f) { alert('Az eredeti táblázat ebben a munkamenetben nem érhető el. Töltse fel újra.'); return; }
+    const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', codepage: 1250 });
+    const name = wb.SheetNames.includes(sheetName) ? sheetName : wb.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', blankrows: true });
+    let last = rows.length; while (last > 0 && !(rows[last - 1] || []).some(c => String(c).trim())) last--;
+    const width = Math.max(1, ...rows.slice(0, last).map(r => { let w = r.length; while (w > 0 && !String(r[w - 1]).trim()) w--; return w; }));
+    const tabs = wb.SheetNames.map(s => `<button class="chip ${s === name ? 'on' : ''}" data-open-sheet="${esc(s)}">${esc(s)}</button>`).join('');
+    const body = `<div class="sv-tabs">${tabs}</div><div class="sv-wrap"><table class="sv"><tbody>${rows.slice(0, last).map((r, i) =>
+      `<tr${i + 1 === Number(row) && name === sheetName ? ' class="sv-hit" id="sv-hit"' : ''}><th>${i + 1}</th>${Array.from({ length: width }, (_, c) => `<td>${esc(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    document.querySelectorAll('.modal').forEach(x => x.remove());
+    const m = showModal(`${esc(st.book.fileName)} · ${esc(name)} munkalap`, body, '<span>Az ajánlatkérő eredeti táblázata, változtatás nélkül.</span>', true);
+    const hit = m.querySelector('#sv-hit'); if (hit) hit.scrollIntoView({ block: 'center' });
+  }
+  async function openDoc(name, page) {
+    const f = await getRaw(name);
+    const doc = st.docs.find(x => x.fileName === name);
+    if (f && /\.pdf$/i.test(name)) { window.open(URL.createObjectURL(f) + (page ? '#page=' + page : ''), '_blank'); return; }
+    if (!doc) { alert('Az eredeti dokumentum ebben a munkamenetben nem érhető el. Töltse fel újra.'); return; }
+    const paras = String(doc.text || '').split(/\r?\n/).map(s => s.trim()).filter(s => s && !/^#{3,}/.test(s));
+    showModal(esc(name), paras.map(p => `<p class="ctx">${esc(p)}</p>`).join(''), '<span>A dokumentum szövege, változtatás nélkül.</span>', true);
   }
 
   /* ---------- Tételek ---------- */
@@ -341,7 +385,7 @@
       h += `<td class="mono">${esc(dims(a)) || '<span class="faint">nincs megadva</span>'}${a.meret_megjegyzes ? `<div class="orig">${esc(a.meret_megjegyzes)}</div>` : ''}</td>
         <td>${mat.map(esc).join('<br>')}</td>
         <td>${makerSelect(it)}<div class="orig">${esc(a.gyarto_indok || '')}</div><div class="conf" title="Mennyire egyértelmű a leírás az árazáshoz"><i style="width:${Math.max(0, Math.min(100, a.biztonsag || 0))}%"></i></div></td>
-        <td>${notesOf(it).map(n => `<div class="note"><span class="badge warn">${NOTE_TYPES[n.tipus] || esc(n.tipus)}</span> ${esc(n.szoveg)}${n.idezet ? `<div class="q-inline ${Parse.quoteInItem(it, n.idezet) ? '' : 'unv'}">„${esc(n.idezet)}”</div>` : ''}</div>`).join('') || '<span class="badge ok">Rendben</span>'}</td></tr>`;
+        <td>${notesOf(it).map(n => `<div class="note"><span class="badge warn">${NOTE_TYPES[n.tipus] || esc(n.tipus)}</span> ${esc(n.szoveg)}${n.idezet ? (Parse.quoteInItem(it, n.idezet) ? `<button class="q-inline q-open" data-item="${esc(it.id)}" data-quote="${esc(n.idezet)}" title="Megnyitás a forrásban">„${esc(n.idezet)}” <span class="q-go">Forrás ›</span></button>` : `<div class="q-inline unv">„${esc(n.idezet)}”</div>`) : ''}</div>`).join('') || '<span class="badge ok">Rendben</span>'}</td></tr>`;
     }
     h += `</tbody></table></div></div>`;
     el.innerHTML = h;
@@ -733,14 +777,14 @@
   async function setFile(kind, file) {
     try {
       if (kind === 'sheet') {
-        st.files.sheet = file; st.book = null; st.detecting = true; render();
+        st.files.sheet = file; st.book = null; st.detecting = true; rawFiles[file.name] = file; render();
         try { st.book = await Parse.readWorkbook(await file.arrayBuffer(), file.name, sheets => api('columns', { sheets })); } finally { st.detecting = false; }
         st.ai = {}; st.tender = null; st.rev = null; st.partStatus = {}; st.tenderStatus = 'idle'; st.elapsedMs = 0;
         if (!st.book.items.length) { alert('Ebben a táblázatban nem találtam tételjegyzéket.' + (st.book.aiError ? ' (' + st.book.aiError + ')' : '')); st.book = null; st.files.sheet = null; }
       } else {
         const list = Array.isArray(file) ? file : [file];
         for (const f of list) {
-          st.reading = 'Olvasás: ' + f.name; render();
+          st.reading = 'Olvasás: ' + f.name; rawFiles[f.name] = f; render();
           const d = await Parse.readDocument(f, p => api('ocr', p), (done, all) => { st.reading = 'Szkennelt PDF, szövegfelismerés: ' + f.name + ' (' + done + ' / ' + all + ' oldal)'; render(); });
           st.docs = st.docs.filter(x => x.fileName !== d.fileName).concat(d);
         }
@@ -800,6 +844,8 @@
       const m = st.chat.msgs[Number(t.dataset.addq)];
       if (m && m.a && st.tender) { st.tender.kerdesek.push({ kerdes: cleanQ(m.a.kerdes_az_ajanlatkeronek), miert: 'A csevegésben merült fel; a feltöltött dokumentumok nem adnak rá választ.', erintett_tetelek: [] }); m.added = true; render(); }
     }
+    else if (t.dataset.openSheet !== undefined) { e.preventDefault(); openSheet(t.dataset.openSheet, t.dataset.row); }
+    else if (t.dataset.openDoc !== undefined) { e.preventDefault(); openDoc(t.dataset.openDoc, t.dataset.page); }
     else if (t.dataset.remove) { e.preventDefault(); removeFile(t.dataset.remove, t.dataset.name); }
     else if (t.dataset.sample) loadSample(t.dataset.sample);
     else if (t.id === 'btn-rev-sample') { const S = SAMPLES[st.sample]; getFile(S.rev[0], S.rev[1]).then(setRevision); }
