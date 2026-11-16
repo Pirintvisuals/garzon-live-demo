@@ -29,20 +29,19 @@
     { id: 'osszefoglalo', label: 'Eredmény' },
     { id: 'ellenorzes', label: 'Hibák a kiírásban' },
     { id: 'kerdesek', label: 'Kérdések' },
-    { id: 'tetelek', label: 'Tételek' },
-    { id: 'bontas', label: 'Ki gyártja' },
+    { id: 'bontas', label: 'Tételek és gyártás' },
     { id: 'arazas', label: 'Árazás' },
     { id: 'revizio', label: 'Módosítás érkezett' }
   ];
   // Minden résznek saját színe van: ugyanaz a szín a folyamatábrán, a fülön és az oldal tetején.
-  const SEC = { feltoltes: '#5d6873', osszefoglalo: '#2f5866', ellenorzes: '#b7791f', kerdesek: '#2b6cb0', tetelek: '#4a5568', bontas: '#a8763e', arazas: '#2c6845', revizio: '#6b4f9a' };
+  const SEC = { feltoltes: '#5d6873', osszefoglalo: '#2f5866', ellenorzes: '#b7791f', kerdesek: '#2b6cb0', tetelek: '#a8763e', bontas: '#a8763e', arazas: '#2c6845', revizio: '#6b4f9a' };
   // Mire jó az oldal, és mit érdemes rajta csinálni.
   const GUIDE = {
     osszefoglalo: ['Egy pillantásra: mit talált a program ebben az ajánlatkérésben.', 'Nézze át a négy kártyát. Lent a vezetésnek szóló rész: a szerződés feltételei és kockázatai alapján érdemes-e ajánlatot adni.'],
     ellenorzes: ['Hol hibás vagy ellentmondásos az ajánlatkérő listája. Ha ez rejtve marad, rossz terméket áraznak be.', 'A „Forrás” gombbal nyissa meg az eredeti szöveget, és döntse el, melyik hibára kell rákérdezni.'],
     kerdesek: ['A talált hibákból kész levél az ajánlatkérőnek (kiegészítő tájékoztatás-kérés).', 'Olvassa át, másolja ki, szerkessze, és küldje el.'],
-    tetelek: ['Az ajánlatkérő szabad szöveges leírásai rendezve: méret, anyag, szín külön oszlopban.', 'Ellenőrizze a tételeket. A „Gyártás” oszlopban átállítható, ki készíti.'],
-    bontas: ['Melyik üzem mit gyárt, és mit kell beszállítótól megvenni.', 'Adja tovább a listákat az üzemeknek. A beszállítói tételekhez kész az ajánlatkérő szöveg.'],
+    tetelek: ['Részletes tétellista: az ajánlatkérő szabad szöveges leírásai rendezve, méret, anyag, szín külön oszlopban.', 'Ellenőrizze a tételeket. A „Gyártás” oszlopban átállítható, ki készíti; a bontás ennek megfelelően frissül.'],
+    bontas: ['A tételek rendezve és szétosztva: melyik üzem mit gyárt, és mit kell beszállítótól megvenni.', 'Adja tovább a listákat az üzemeknek. A beszállítói tételekhez kész az ajánlatkérő szöveg. Minden oszlop a „Részletes tétellista” gombbal látszik.'],
     arazas: ['Első árvázlat tételtípusonként: katalógus, beszállítói, saját gyártás, egyedi. Mintaárakkal: azt mutatja, hogyan készülne.', 'Nyisson meg egy „Számítás” gombot, és állítsa a haszon és a kockázati felár mértékét. A végső árat mindig a kolléga hagyja jóvá.'],
     revizio: ['Ha az ajánlatkérő később javított tételjegyzéket küld: pontosan mi változott?', 'Töltse fel az új táblázatot. A változások tételenként, színnel jelölve látszanak.']
   };
@@ -100,13 +99,15 @@
   }
 
   /* ---------- keret ---------- */
+  // A részletes tétellista (tetelek) nem külön lépés, hanem a "Tételek és gyártás" lépés aloldala.
+  const stepOf = tab => (tab === 'tetelek' ? 'bontas' : tab);
   function renderChrome() {
     const c = counts();
     $('#tabs').innerHTML = TABS.map(t => {
       // A füleken csak a lépés sorszáma látszik; a darabszámok az oldalakon vannak (két szám egymás mellett összezavaró volt).
       const cnt = '';
       const disabled = t.id !== 'feltoltes' && !st.book;
-      return `<button class="tab" role="tab" data-tab="${t.id}" style="--sec:${SEC[t.id]}" aria-selected="${st.tab === t.id}" ${disabled ? 'disabled' : ''}><span class="tn">${TABS.indexOf(t) + 1}</span>${t.label}${cnt}</button>`;
+      return `<button class="tab" role="tab" data-tab="${t.id}" style="--sec:${SEC[t.id]}" aria-selected="${stepOf(st.tab) === t.id}" ${disabled ? 'disabled' : ''}><span class="tn">${TABS.indexOf(t) + 1}</span>${t.label}${cnt}</button>`;
     }).join('');
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + st.tab));
     const title = st.tender ? st.tender.osszefoglalo.targy : (st.book ? st.book.fileName : 'Nincs betöltött ajánlatkérés');
@@ -134,9 +135,10 @@
     const el = $('#view-' + st.tab), g = GUIDE[st.tab];
     el.style.setProperty('--sec', SEC[st.tab]);
     if (!g || !st.book) return;
-    const idx = TABS.findIndex(t => t.id === st.tab), next = TABS[idx + 1];
+    const idx = TABS.findIndex(t => t.id === stepOf(st.tab)), next = TABS[idx + 1];
     el.classList.add('guided');
-    el.insertAdjacentHTML('afterbegin', `<div class="guide"><span class="g-n">${idx + 1}</span><div><div class="g-what">${esc(g[0])}</div><div class="g-do"><b>Mit tegyen itt:</b> ${esc(g[1])}</div>${LIVE[st.tab] ? `<div class="g-live"><b>Az éles rendszerben:</b> ${esc(LIVE[st.tab])}</div>` : ''}</div></div>`);
+    const back = st.tab === 'tetelek' ? `<button class="btn btn-sm g-back" data-tab="bontas">← Vissza az üzemenkénti bontáshoz</button>` : '';
+    el.insertAdjacentHTML('afterbegin', `<div class="guide"><span class="g-n">${idx + 1}</span><div>${back}<div class="g-what">${esc(g[0])}</div><div class="g-do"><b>Mit tegyen itt:</b> ${esc(g[1])}</div>${LIVE[st.tab] ? `<div class="g-live"><b>Az éles rendszerben:</b> ${esc(LIVE[st.tab])}</div>` : ''}</div></div>`);
     el.insertAdjacentHTML('beforeend', next
       ? `<div class="nextbar" style="--sec:${SEC[next.id]}"><span>Következő lépés</span><button class="btn nextbtn" data-tab="${next.id}"><span class="tn">${idx + 2}</span>${next.label} →</button></div>`
       : `<div class="nextbar"><span>Ez az utolsó lépés. Az előkészített munkafüzet a jobb felső gombbal letölthető, az árazás abban folytatható.</span></div>`);
@@ -156,16 +158,15 @@
         <div class="fl-in ${f.sheet ? 'ok' : ''}"><b>Tételjegyzék (Excel)</b><span>mit kér, hány darabot; az árak üresek</span></div>
         <div class="fl-in ${f.doc ? 'ok' : ''}"><b>Feltételek (PDF, Word)</b><span>határidő, fizetés, kötbér, jótállás</span></div></div>
       <div class="fl-arrow">→</div>
-      <div class="fl-mid"><b>A program végigolvassa</b><span>kb. 1 perc</span></div>
+      <div class="fl-mid"><b>A program végigolvassa</b><span>kb. 2 perc</span></div>
       <div class="fl-arrow">→</div>
       <div class="fl-col wide"><div class="fl-h">Amit Ön kap, ellenőrzésre</div><div class="fl-outs">
         ${outBtn('ellenorzes', 'Hibák a kiírásban', 'ellentmondás, elírás, hiány')}
         ${outBtn('kerdesek', 'Kérdések', 'kész levél az ajánlatkérőnek')}
-        ${outBtn('tetelek', 'Rendezett tételek', 'méret, anyag, szín oszlopokban')}
-        ${outBtn('bontas', 'Ki gyártja', 'faüzem, fémüzem, beszállító')}
-        ${outBtn('arazas', 'Árbecslés és Excel', 'ebben folytatódik az árazás')}</div></div>
+        ${outBtn('bontas', 'Tételek és gyártás', 'rendezve, üzemenként szétosztva')}
+        ${outBtn('arazas', 'Első árvázlat', 'tételtípusonként, Excelben is')}</div></div>
       <div class="fl-arrow">→</div>
-      <div class="fl-end"><b>Az árajánlatadó áraz</b><span>Árat a program nem ad.</span></div>
+      <div class="fl-end"><b>Az árajánlatadó dönt</b><span>A végső árat a kolléga hagyja jóvá.</span></div>
     </div>`;
     h += `<div class="grid g2">
       <label class="drop ${f.sheet ? 'has' : ''}" data-kind="sheet"><input type="file" accept=".xls,.xlsx,.xlsm,.csv" hidden>
@@ -278,9 +279,9 @@
         <button class="btn" data-tab="kerdesek">Levél megnyitása</button></div>
       <div class="hubc"><div class="hub-n">${c.items}</div><div class="hub-t">tételt rendezett és osztott szét (${esc(qtyText(items()))})</div>
         <div class="makers col">${byMaker.map(x => `<span class="mk ${MAKERS[x.k].cls}"><b>${MAKERS[x.k].label}</b> ${x.n} tétel · ${esc(x.q)}</span>`).join('')}</div>
-        <button class="btn" data-tab="bontas">Ki gyártja</button> <button class="btn" data-tab="tetelek">Tételek</button></div>
+        <button class="btn" data-tab="bontas">Tételek és gyártás</button></div>
       <div class="hubc"><div class="hub-n">${st.elapsedMs ? Math.round(st.elapsedMs / 1000) + ' mp' : '–'}</div><div class="hub-t">alatt olvasta végig a ${c.items} tételt és ${st.docIndex ? st.docIndex.paras.length.toLocaleString('hu-HU') + ' bekezdésnyi' : 'a'} dokumentumot</div>
-        <ul><li>Az árakat nem tölti ki: az árazás az Önök szakértelme.</li><li>Az előkészített Excel letölthető, abban folytatható a munka.</li></ul>
+        <ul><li>Az Árazás oldalon első árvázlatot ad; a végső árat a kolléga hagyja jóvá.</li><li>Az előkészített Excel letölthető, abban folytatható a munka.</li></ul>
         <button class="btn" data-tab="arazas">Árazás</button></div>
     </div>
     ${todoHtml()}
@@ -420,7 +421,8 @@
   function viewSplit() {
     const el = $('#view-bontas');
     if (!items().some(i => st.ai[i.id])) { el.innerHTML = waiting('A gyártási bontás'); return; }
-    let h = `<div class="view-head"><div><h2>Gyártási bontás</h2><p>Ki készíti az egyes tételeket. A vegyes (fémváz + lapanyag) tételek mindkét üzem listáján megjelennek. A besorolás a Tételek fülön átállítható.</p></div></div>`;
+    let h = `<div class="view-head"><div><h2>Tételek és gyártás</h2><p>Ki készíti az egyes tételeket. A vegyes (fémváz + lapanyag) tételek mindkét üzem listáján megjelennek.</p></div>
+      <div><button class="btn" data-tab="tetelek">Részletes tétellista, minden oszloppal →</button></div></div>`;
     const groups = [
       { k: 'fa', title: 'Faüzem', test: m => m === 'fa' || m === 'fa_fem' },
       { k: 'fem', title: 'Fémüzem', test: m => m === 'fem' || m === 'fa_fem' },
