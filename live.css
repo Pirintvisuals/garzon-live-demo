@@ -237,3 +237,23 @@ table.sv th { position: sticky; left: 0; background: var(--surface-2); color: va
 table.sv td { border: 1px solid var(--border); padding: 4px 6px; vertical-align: top; min-width: 60px; max-width: 420px; white-space: pre-wrap; }
 table.sv tr.sv-hit td { background: #fff3c4; }
 table.sv tr.sv-hit th { background: #ffe9a8; color: var(--text); }
+
+/* Árvázlat */
+.sample-note { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-ink); border-radius: 5px; padding: 10px 14px; margin-bottom: 14px; font-size: 13.5px; }
+.ptypes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.ptype { background: var(--surface); border: 1px solid var(--border); border-top: 4px solid var(--tc); border-radius: 5px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+.pt-n { font-size: 24px; font-weight: 600; line-height: 1; color: var(--tc); }
+.pt-l { font-weight: 600; font-size: 13.5px; }
+.pt-h { font-size: 12px; color: var(--muted); flex: 1; }
+.pt-s { font: 600 13px var(--mono); }
+.t-kat { --tc: #2b6cb0; } .t-besz { --tc: #6f8a5b; } .t-gyart { --tc: #a8763e; } .t-egyedi { --tc: #9a2f2f; } .t-piac { --tc: #6b4f9a; }
+.badge.t-kat, .badge.t-besz, .badge.t-gyart, .badge.t-egyedi { background: color-mix(in srgb, var(--tc) 12%, #fff); color: var(--tc); }
+.pin-l { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 12.5px; }
+.ptotal { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; }
+.ptotal b { font: 600 18px var(--mono); margin-left: 8px; }
+table.ptable td { font-size: 12.5px; vertical-align: middle; }
+.calc-row td { background: var(--surface-2); }
+.calc { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px; padding: 6px 0; }
+.calc table { background: var(--surface); }
+.warn-t { color: var(--amber-ink); margin-top: 2px; }
+@media (max-width: 1000px) { .ptypes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .calc { grid-template-columns: minmax(0, 1fr); } }

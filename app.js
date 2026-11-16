@@ -43,7 +43,7 @@
     kerdesek: ['A talált hibákból kész levél az ajánlatkérőnek (kiegészítő tájékoztatás-kérés).', 'Olvassa át, másolja ki, szerkessze, és küldje el.'],
     tetelek: ['Az ajánlatkérő szabad szöveges leírásai rendezve: méret, anyag, szín külön oszlopban.', 'Ellenőrizze a tételeket. A „Gyártás” oszlopban átállítható, ki készíti.'],
     bontas: ['Melyik üzem mit gyárt, és mit kell beszállítótól megvenni.', 'Adja tovább a listákat az üzemeknek. A beszállítói tételekhez kész az ajánlatkérő szöveg.'],
-    arazas: ['Gyors becslés arra, mekkora ez az ajánlat. A program az Önök árait nem ismeri.', 'Írjon be átlagárat kategóriánként. A pontos árazás a letöltött Excelben történik, tételenként.'],
+    arazas: ['Első árvázlat tételtípusonként: katalógus, beszállítói, saját gyártás, egyedi. Mintaárakkal: azt mutatja, hogyan készülne.', 'Nyisson meg egy „Számítás” gombot, és állítsa a haszon és a kockázati felár mértékét. A végső árat mindig a kolléga hagyja jóvá.'],
     revizio: ['Ha az ajánlatkérő később javított tételjegyzéket küld: pontosan mi változott?', 'Töltse fel az új táblázatot. A változások tételenként, színnel jelölve látszanak.']
   };
   const IMPACT = { igen: { label: 'Árat érinti', cls: 'neg' }, lehet: { label: 'Árat érintheti', cls: 'warn' }, nem: { label: 'Csak pontosítás', cls: 'grey' } };
@@ -63,7 +63,7 @@
   };
 
   const fresh = () => ({
-    sample: '', rev: null, prices: {}, todo: {}, replay: null, replayed: false, chatCache: {}, chat: { open: false, msgs: [], draft: '' },
+    sample: '', rev: null, prices: {}, pricing: { margin: 12, risk: 0, open: {} }, todo: {}, replay: null, replayed: false, chatCache: {}, chat: { open: false, msgs: [], draft: '' },
     tab: 'feltoltes', files: { sheet: null, doc: null }, book: null, doc: null, docIndex: null,
     ai: {}, tender: null, partStatus: {}, tenderStatus: 'idle', tenderError: '',
     docs: [], reading: '', running: false, startedAt: 0, elapsedMs: 0, model: '', filter: { maker: '', part: '', onlyNotes: false }, fromSaved: false
@@ -461,41 +461,52 @@
     el.innerHTML = h;
   }
 
-  /* ---------- Árazás: tájékoztató sáv kategóriánként ---------- */
-  const catOf = it => ((st.ai[it.id] && st.ai[it.id].kategoria) || 'egyéb').toLowerCase().trim();
-  const priceOf = it => { const p = st.prices[catOf(it)]; return p && p.avg > 0 ? p : null; };
+  /* ---------- Árazás: első árvázlat tételtípusonként, mintaárakkal (pricing.js) ---------- */
   const ft = n => Math.round(n).toLocaleString('hu-HU') + ' Ft';
+  const priced = () => items().map(it => ({ it, p: Pricing.priceItem(it, st.ai[it.id], notesOf(it), st.pricing.margin, st.pricing.risk) }));
+  const priceOf = it => { const p = Pricing.priceItem(it, st.ai[it.id], notesOf(it), st.pricing.margin, st.pricing.risk); return p.unit ? { avg: p.unit } : null; };
+  function calcHtml(p) {
+    if (p.type === 'gyartott') {
+      return `<div class="calc"><table class="compact"><thead><tr><th>Anyag és munka</th><th class="num">Menny.</th><th class="num">Egységár</th><th class="num">Érték</th></tr></thead><tbody>
+        ${p.mat.map(m => `<tr><td>${esc(m.name)}${m.note ? ` <span class="faint">(${esc(m.note)})</span>` : ''}</td><td class="num">${fmt(m.q)} ${esc(m.unit)}</td><td class="num">${ft(m.price)}</td><td class="num">${ft(m.q * m.price)}</td></tr>`).join('')}
+        ${p.lab.map(l => `<tr><td>${esc(l.name)} munkaidő</td><td class="num">${fmt(l.h)} óra</td><td class="num">${ft(l.rate)}</td><td class="num">${ft(l.h * l.rate)}</td></tr>`).join('')}
+        </tbody></table>
+        <table class="compact sch"><tbody>${p.rows.map(r => `<tr><td>${esc(r[0])}</td><td class="num">${ft(r[1])}</td></tr>`).join('')}
+        <tr class="sub"><td>Önköltség</td><td class="num">${ft(p.onkoltseg)}</td></tr>
+        <tr><td>Haszon (${st.pricing.margin}%) és kockázati felár (${st.pricing.risk}%)</td><td class="num">${ft(p.unit - p.onkoltseg)}</td></tr>
+        <tr class="total"><td>Nettó egységár (vázlat)</td><td class="num">${ft(p.unit)}</td></tr></tbody></table></div>`;
+    }
+    if (p.detail) return `<div class="calc"><table class="compact sch"><tbody>${p.detail.map(r => `<tr><td>${esc(r[0])}</td><td class="num">${ft(r[1])}</td></tr>`).join('')}<tr class="total"><td>Nettó egységár (vázlat)</td><td class="num">${ft(p.unit)}</td></tr></tbody></table></div>`;
+    return '';
+  }
   function viewPricing() {
     const el = $('#view-arazas');
-    if (!items().some(i => st.ai[i.id])) { el.innerHTML = waiting('Az árazó lap'); return; }
-    const cats = {};
-    items().forEach(it => { const k = catOf(it); (cats[k] = cats[k] || []).push(it); });
-    const keys = Object.keys(cats).sort((a, b) => cats[b].length - cats[a].length);
-    let lo = 0, hi = 0, mid = 0, pricedItems = 0;
-    let h = `<div class="view-head"><div><h2>Árazás: tájékoztató sáv</h2><p>A program nem ismeri az Önök árait, ezért itt nincs kitöltött szám. Írjon be kategóriánként egy átlagos nettó egységárat és egy ± sávot: a program beszorozza a mennyiségekkel, és megmutatja az ajánlat nagyságrendjét. Ez gyors becslés, nem ajánlati ár. A pontos árazás a letölthető Excelben, tételenként történik.</p></div></div>`;
-    h += `<div class="card"><div class="tbl-wrap"><table class="price"><thead><tr><th>Kategória</th><th class="num">Tétel</th><th class="num">Mennyiség</th><th>Átlagos nettó egységár</th><th>Sáv</th><th class="num">Becsült nettó érték</th></tr></thead><tbody>`;
-    for (const k of keys) {
-      const list = cats[k], p = st.prices[k] || {}, q = list.reduce((s2, i) => s2 + i.qty, 0);
-      let cell = '<span class="faint">X × mennyiség, ± Y %</span>';
-      if (p.avg > 0) {
-        const m = q * p.avg, d = m * (p.pm || 0) / 100;
-        lo += m - d; hi += m + d; mid += m; pricedItems += list.length;
-        cell = p.pm > 0 ? `<b>${ft(m - d)} – ${ft(m + d)}</b>` : `<b>${ft(m)}</b>`;
-      }
-      h += `<tr><td><b>${esc(k)}</b><div class="orig">${esc([...new Set(list.map(i => i.name.trim()))].slice(0, 3).join(', '))}${list.length > 3 ? '…' : ''}</div></td>
-        <td class="num">${list.length}</td><td class="num">${esc(qtyText(list))}</td>
-        <td><input class="pin" type="number" min="0" step="100" placeholder="X" value="${p.avg > 0 ? p.avg : ''}" data-price="${esc(k)}" aria-label="Átlagos egységár: ${esc(k)}"> Ft</td>
-        <td>± <input class="pin sm" type="number" min="0" max="100" step="1" placeholder="Y" value="${p.pm > 0 ? p.pm : ''}" data-pm="${esc(k)}" aria-label="Sáv százalékban: ${esc(k)}"> %</td>
-        <td class="num">${cell}</td></tr>`;
+    if (!items().some(i => st.ai[i.id])) { el.innerHTML = waiting('Az árvázlat'); return; }
+    const all = priced(), T = Pricing.TYPES;
+    const sum = list => list.reduce((s, x) => s + (x.p.unit || 0) * x.it.qty, 0);
+    const byType = k => all.filter(x => x.p.type === k);
+    let h = `<div class="view-head"><div><h2>Árazás: első árvázlat</h2></div></div>
+      <div class="sample-note"><b>Minden szám mintaérték.</b> Ez az oldal azt mutatja meg, <b>hogyan</b> készülne el az első árvázlat tételtípusonként. Az éles változatban az Önök árlistája, normaidői és kalkulációs sémája kerülne ide, és minden árat a kolléga hagy jóvá.</div>`;
+    h += `<div class="ptypes">${['katalogus', 'beszallitoi', 'gyartott', 'egyedi'].map(k => { const l = byType(k); return `<div class="ptype ${T[k].cls}"><div class="pt-n">${l.length}</div><div class="pt-l">${T[k].label}</div><div class="pt-h">${esc(T[k].how)}</div>${k === 'egyedi' ? '' : `<div class="pt-s">${ft(sum(l))}</div>`}</div>`; }).join('')}
+      <div class="ptype t-piac"><div class="pt-l">Piaci döntés: mindig az Önöké</div><div class="pt-h">Haszon és kockázati felár (kötbér, határidő, verseny). A program ezt nem találja ki.</div>
+        <label class="pin-l">Haszon <span><input class="pin sm" type="number" min="0" max="60" step="1" value="${st.pricing.margin}" data-pmargin> %</span></label>
+        <label class="pin-l">Kockázati felár <span><input class="pin sm" type="number" min="0" max="40" step="1" value="${st.pricing.risk}" data-prisk> %</span></label></div></div>`;
+    h += `<div class="ptotal"><div><span class="muted">Árvázlat összesen (nettó, mintaárakkal)</span><b>${ft(sum(all))}</b></div><div class="muted">${all.filter(x => x.p.unit).length} tételnek van vázlata · <b>${byType('egyedi').length} tételt a kolléga áraz</b> · szállítás és szerelés helyszínenként külön</div></div>`;
+    h += `<div class="card"><div class="tbl-wrap"><table class="ptable"><thead><tr><th>Tétel</th><th>Megnevezés</th><th class="num">Menny.</th><th>Típus és módszer</th><th class="num">Egységár</th><th class="num">Összesen</th><th></th></tr></thead><tbody>`;
+    let last = null;
+    for (const { it, p } of all) {
+      if (it.partNo !== last) { last = it.partNo; h += `<tr class="zone-row"><td colspan="7">${esc(it.part)}</td></tr>`; }
+      const open = st.pricing.open[it.id];
+      h += `<tr><td class="code">${esc(it.id)}</td><td><b>${esc(it.name)}</b></td><td class="num">${fmt(it.qty)} ${esc(it.unit)}</td>
+        <td><span class="badge ${T[p.type].cls}">${T[p.type].label}</span> <span class="muted small">${esc(p.reason || T[p.type].how)}</span>${p.warn ? `<div class="warn-t small">⚠ ${esc(p.warn)}</div>` : ''}</td>
+        <td class="num">${p.unit ? ft(p.unit) : '<span class="faint">kolléga</span>'}</td><td class="num">${p.unit ? ft(p.unit * it.qty) : ''}</td>
+        <td>${p.unit ? `<button class="btn btn-sm" data-pcalc="${esc(it.id)}">${open ? 'Bezár' : 'Számítás'}</button>` : ''}</td></tr>`;
+      if (open && p.unit) h += `<tr class="calc-row"><td></td><td colspan="6">${calcHtml(p)}</td></tr>`;
     }
-    h += `<tr class="total"><td colspan="5">Összesen${pricedItems ? ` (${pricedItems} / ${items().length} tétel beárazva)` : ''}</td><td class="num">${pricedItems ? (hi > lo + 1 ? `${ft(lo)} – ${ft(hi)}` : ft(mid)) : 'Z'}</td></tr></tbody></table></div></div>`;
-    h += `<div class="grid g2"><div class="card"><div class="card-h"><h3>Az éles változatban</h3></div><div class="card-b"><ul class="chk">
-      <li>Az Önök saját árazó táblája töltődik be, nem kell kézzel beírni.</li>
-      <li>Az ár tételenként készül a méretből és az anyagból, nem kategóriaátlagból.</li>
-      <li>Az árajánlatadó minden árat felülírhat, a végső szám az övé.</li></ul></div></div>
-      <div class="card"><div class="card-h"><h3>Mi kerül az Excelbe</h3></div><div class="card-b"><p style="margin:0" class="muted">A beírt átlagár kiinduló egységárként bekerül a letöltött munkafüzet „Nettó egységár” oszlopába, ahol tételenként pontosítható. Ahol nincs megadva ár, az oszlop üres marad.</p></div></div></div>`;
+    h += `</tbody></table></div></div>`;
     el.innerHTML = h;
   }
+
 
   /* ---------- Kérdések ---------- */
   const cleanQ = s => String(s || '').replace(/^\s*Tisztelt\s+[^!,.]{0,40}[!,.]\s*/i, '');
@@ -863,6 +874,7 @@
     }
     else if (t.dataset.openSheet !== undefined) { e.preventDefault(); openSheet(t.dataset.openSheet, t.dataset.row); }
     else if (t.dataset.openDoc !== undefined) { e.preventDefault(); openDoc(t.dataset.openDoc, t.dataset.page); }
+    else if (t.dataset.pcalc) { const y = window.scrollY; st.pricing.open[t.dataset.pcalc] = !st.pricing.open[t.dataset.pcalc]; render(); window.scrollTo(0, y); }
     else if (t.dataset.remove) { e.preventDefault(); removeFile(t.dataset.remove, t.dataset.name); }
     else if (t.dataset.sample) loadSample(t.dataset.sample);
     else if (t.id === 'btn-rev-sample') { const S = SAMPLES[st.sample]; getFile(S.rev[0], S.rev[1]).then(setRevision); }
@@ -881,12 +893,8 @@
     else if (t.id === 'f-maker') { st.filter.maker = t.value; render(); }
     else if (t.id === 'f-notes') { st.filter.onlyNotes = t.checked; render(); }
     else if (t.dataset.todo) { const y = window.scrollY; st.todo[t.dataset.todo] = t.checked; render(); window.scrollTo(0, y); }
-    else if (t.dataset.price !== undefined || t.dataset.pm !== undefined) {
-      const k = t.dataset.price !== undefined ? t.dataset.price : t.dataset.pm, v = Math.max(0, parseFloat(t.value) || 0);
-      st.prices[k] = st.prices[k] || {};
-      if (t.dataset.price !== undefined) st.prices[k].avg = v; else st.prices[k].pm = Math.min(100, v);
-      render();
-    }
+    else if (t.dataset.pmargin !== undefined) { st.pricing.margin = Math.max(0, Math.min(60, parseFloat(t.value) || 0)); render(); }
+    else if (t.dataset.prisk !== undefined) { st.pricing.risk = Math.max(0, Math.min(40, parseFloat(t.value) || 0)); render(); }
   });
   ['dragover', 'drop'].forEach(ev => document.addEventListener(ev, e => {
     const d = e.target.closest && e.target.closest('.drop'); if (!d) return;
