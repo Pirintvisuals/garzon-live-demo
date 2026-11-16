@@ -324,14 +324,27 @@
   /* ---------- az eredeti, feltöltött fájlok megnyitása ---------- */
   // A fájlok a böngészőben maradnak (nem kerülnek a mentett eredménybe); a mintánál szükség esetén újra letöltjük.
   const rawFiles = {};
+  // A minta fájljainak saját webcíme (így a böngésző a valódi fájlként nyitja meg, a helyes típussal).
+  function sampleUrlOf(name) {
+    for (const k of Object.keys(SAMPLES)) {
+      const S = SAMPLES[k], hit = [S.sheet, ...(S.docs || []), S.rev].filter(Boolean).find(x => x[1] === name);
+      if (hit) return hit[0];
+    }
+    return '';
+  }
   async function getRaw(name) {
     if (rawFiles[name]) return rawFiles[name];
-    for (const k of Object.keys(SAMPLES)) {
-      const S = SAMPLES[k], list = [S.sheet, ...(S.docs || []), S.rev].filter(Boolean);
-      const hit = list.find(x => x[1] === name);
-      if (hit) { rawFiles[name] = await getFile(hit[0], hit[1]); return rawFiles[name]; }
-    }
+    const url = sampleUrlOf(name);
+    if (url) { rawFiles[name] = await getFile(url, name); return rawFiles[name]; }
     return null;
+  }
+  const MIME = { pdf: 'application/pdf', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xls: 'application/vnd.ms-excel', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+  // Letölthető / megnyitható cím: a mintánál a fájl saját címe, feltöltött fájlnál a helyes típusú helyi cím.
+  async function fileUrl(name) {
+    const u = sampleUrlOf(name); if (u) return u;
+    const f = await getRaw(name); if (!f) return '';
+    const ext = (name.split('.').pop() || '').toLowerCase();
+    return URL.createObjectURL(new Blob([f], { type: MIME[ext] || f.type || 'application/octet-stream' }));
   }
   async function openSheet(sheetName, row) {
     const f = await getRaw(st.book.fileName);
@@ -345,13 +358,17 @@
     const body = `<div class="sv-tabs">${tabs}</div><div class="sv-wrap"><table class="sv"><tbody>${rows.slice(0, last).map((r, i) =>
       `<tr${i + 1 === Number(row) && name === sheetName ? ' class="sv-hit" id="sv-hit"' : ''}><th>${i + 1}</th>${Array.from({ length: width }, (_, c) => `<td>${esc(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
     document.querySelectorAll('.modal').forEach(x => x.remove());
-    const m = showModal(`${esc(st.book.fileName)} · ${esc(name)} munkalap`, body, '<span>Az ajánlatkérő eredeti táblázata, változtatás nélkül.</span>', true);
+    const dl = await fileUrl(st.book.fileName);
+    const m = showModal(`${esc(st.book.fileName)} · ${esc(name)} munkalap`, body, `<span>Az ajánlatkérő eredeti táblázata, változtatás nélkül.</span>${dl ? `<a class="btn btn-sm" href="${esc(dl)}" download="${esc(st.book.fileName)}">Letöltés és megnyitás Excelben</a>` : ''}`, true);
     const hit = m.querySelector('#sv-hit'); if (hit) hit.scrollIntoView({ block: 'center' });
   }
   async function openDoc(name, page) {
-    const f = await getRaw(name);
+    const hash = page ? '#page=' + page : '';
+    // A minta PDF-je a saját címén nyílik meg (azonnal, hogy a böngésző ne tiltsa le az új lapot).
+    const su = sampleUrlOf(name);
+    if (su && /\.pdf$/i.test(name)) { window.open(su + hash, '_blank'); return; }
     const doc = st.docs.find(x => x.fileName === name);
-    if (f && /\.pdf$/i.test(name)) { window.open(URL.createObjectURL(f) + (page ? '#page=' + page : ''), '_blank'); return; }
+    if (/\.pdf$/i.test(name)) { const u = await fileUrl(name); if (u) { window.open(u + hash, '_blank'); return; } }
     if (!doc) { alert('Az eredeti dokumentum ebben a munkamenetben nem érhető el. Töltse fel újra.'); return; }
     const paras = String(doc.text || '').split(/\r?\n/).map(s => s.trim()).filter(s => s && !/^#{3,}/.test(s));
     showModal(esc(name), paras.map(p => `<p class="ctx">${esc(p)}</p>`).join(''), '<span>A dokumentum szövege, változtatás nélkül.</span>', true);
