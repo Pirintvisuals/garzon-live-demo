@@ -22,6 +22,7 @@ Mintaértékek:
 - Leírás „laminált bútorlap”, szín „Fémváz: RAL 1015”: 15.
 - Szűk, de nem lehetetlen méret: 45-65.
 - Saját becslésre (például „egy dosszié kb. 320 mm”) épülő állítás: legfeljebb 65, hacsak a számolás minden adata a szövegben szerepel.
+- „HIÁNYZÓ ADAT” felvetés: mennyire valószínű, hogy az adat tényleg kell az árazáshoz, és a szöveg máshol sem adja meg (a korcsoport, a szokásos méret vagy a kereskedelmi termék jellege pótolhatja). Ha az árazáshoz kell és nincs meg: 60-90. Egy tételnél a hiányzó adatokat egy kérdésben kérdezze.
 - Számolási állítás: számolja újra; ha a számolás helyes és nincs ellentmondás, 0-10.
 indok: egy rövid mondat, miért ennyi.
 kerdes: ha a valoszinuseg legalább 50, egy kérdés az ajánlatkérőnek (kiegészítő tájékoztatás-kérés), udvarias, hivatalos magyar megfogalmazásban, önállóan érthetően, a TÉTELEK sorban megadott rész- és tételszámra és megnevezésre hivatkozva. Megszólítás és elköszönés nélkül. Konkrétan kérdezzen rá a tisztázandó pontra, és ha van kézenfekvő helyes értelmezés, kérje annak megerősítését (például: „Kérjük megerősíteni, hogy a mélység helyesen 600 mm.”). Ha a valoszinuseg 50 alatti, a kerdes üres szöveg.

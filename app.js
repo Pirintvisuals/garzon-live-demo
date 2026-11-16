@@ -804,19 +804,30 @@
     render();
   }
   // Második, szkeptikus kör: a felvetett hibák valószínűségét egy külön hívás pontozza újra.
-  // Azonos szövegű tételhibát egyszer küldünk. Ha a hívás nem sikerül, az első becslés marad.
-  // A kérdések levele is ebből készül: minden legalább 50%-os hibához egy kérdés, valószínűség szerint.
+  // Azonos szövegű tételhibát egyszer küldünk; a hiányzó adatokat tételenként egy felvetésbe fogjuk.
+  // A kérdések levele is ebből készül: minden legalább 50%-os hibához és hiányhoz egy kérdés, valószínűség szerint.
+  // onlyMissing: csak a hiányzó adatokat pontozza, és a kérdéseiket a meglévő levélhez adja (a mentett mintához).
   const itemLabel = it => `${it.partNo}. rész ${String(it.id).split('/')[1] || it.id}. tétel (${it.name.trim()})`;
-  async function rescore() {
+  async function rescore(onlyMissing) {
     const groups = new Map(), list = [];
-    for (const it of items()) for (const n of notesOf(it)) {
-      if (n.tipus === 'hiany') continue;
-      const key = n.tipus + '|' + n.szoveg.trim().toLowerCase();
-      if (!groups.has(key)) { groups.set(key, { notes: [], its: [] }); list.push({ id: 'n' + list.length, key, allitas: n.szoveg, idezet: n.idezet, ha_megsem_hiba: n.ha_megsem_hiba || '', kontextus: `${it.name} | ${it.qty} ${it.unit} | ${it.spec}` }); }
-      const g = groups.get(key); g.notes.push(n); if (!g.its.includes(it)) g.its.push(it);
+    const ctxOf = it => `${it.name} | ${it.qty} ${it.unit} | ${it.spec}`;
+    for (const it of items()) {
+      const miss = notesOf(it).filter(n => n.tipus === 'hiany');
+      if (miss.length) {
+        const key = 'hiany|' + it.id;
+        groups.set(key, { notes: miss, its: [it] });
+        list.push({ id: 'n' + list.length, key, allitas: 'HIÁNYZÓ ADAT: ' + miss.map(n => n.szoveg).join(' '), idezet: miss.map(n => n.idezet).filter(Boolean).join(' / '), ha_megsem_hiba: miss.map(n => n.ha_megsem_hiba).filter(Boolean).join(' '), kontextus: ctxOf(it) });
+      }
+      if (onlyMissing) continue;
+      for (const n of notesOf(it)) {
+        if (n.tipus === 'hiany') continue;
+        const key = n.tipus + '|' + n.szoveg.trim().toLowerCase();
+        if (!groups.has(key)) { groups.set(key, { notes: [], its: [] }); list.push({ id: 'n' + list.length, key, allitas: n.szoveg, idezet: n.idezet, ha_megsem_hiba: n.ha_megsem_hiba || '', kontextus: ctxOf(it) }); }
+        const g = groups.get(key); g.notes.push(n); if (!g.its.includes(it)) g.its.push(it);
+      }
     }
     list.forEach(f => { if (f.key) f.tetelek = groups.get(f.key).its.map(itemLabel).join('; '); });
-    (st.tender ? st.tender.ellenorzes : []).forEach((f, i) => {
+    if (!onlyMissing) (st.tender ? st.tender.ellenorzes : []).forEach((f, i) => {
       const its = f.erintett_tetelek.map(itemById).filter(Boolean);
       const ctx = its.slice(0, 3).map(it => `${it.id} ${it.name}: ${it.spec}`).join('\n');
       list.push({ id: 'd' + i, tetelek: its.map(itemLabel).join('; '), allitas: f.cim + ': ' + f.leiras, idezet: f.idezet, ha_megsem_hiba: f.ha_megsem_hiba || '', kontextus: ctx || f.idezet });
@@ -832,14 +843,16 @@
         const targets = src.key ? groups.get(src.key).notes : [doc];
         for (const t of targets) { if (t.valoszinuseg_elso == null) t.valoszinuseg_elso = t.valoszinuseg; t.valoszinuseg = p.valoszinuseg; t.pont_indok = p.indok; }
         const ids = src.key ? groups.get(src.key).its.map(i => i.id) : doc.erintett_tetelek;
-        if (p.valoszinuseg >= 50 && p.kerdes && p.kerdes.trim()) qs.push({ kerdes: p.kerdes.trim(), miert: src.allitas, erintett_tetelek: ids, valoszinuseg: p.valoszinuseg, doc: !src.key });
+        if (p.valoszinuseg >= 50 && p.kerdes && p.kerdes.trim()) qs.push({ kerdes: p.kerdes.trim(), miert: src.allitas.replace(/^HIÁNYZÓ ADAT: /, 'Hiányzó adat: '), erintett_tetelek: ids, valoszinuseg: p.valoszinuseg, doc: !src.key });
       }
       if (st.tender && qs.length) {
         if (!st.tender.kerdesek_elso) st.tender.kerdesek_elso = st.tender.kerdesek;
+        const isDoc = q => (q.doc != null ? q.doc : st.tender.ellenorzes.some(f => q.miert.startsWith(f.cim + ':')));
+        const all = (onlyMissing ? st.tender.kerdesek.map(q => ({ ...q, doc: isDoc(q) })) : []).concat(qs);
         // Egyetlen tételt érintő dokumentum-kérdés kimarad, ha arra a tételre már van tétel-kérdés (ugyanazt kérdezné).
-        const itemQ = new Set(qs.filter(q => !q.doc).flatMap(q => q.erintett_tetelek));
-        st.tender.kerdesek = qs.filter(q => !(q.doc && q.erintett_tetelek.length === 1 && itemQ.has(q.erintett_tetelek[0])))
-          .sort((x, y) => y.valoszinuseg - x.valoszinuseg).map(({ doc, ...q }) => q);
+        const itemQ = new Set(all.filter(q => !q.doc).flatMap(q => q.erintett_tetelek));
+        st.tender.kerdesek = all.filter(q => !(q.doc && q.erintett_tetelek.length === 1 && itemQ.has(q.erintett_tetelek[0])))
+          .sort((x, y) => y.valoszinuseg - x.valoszinuseg);
       }
       st.rescored = true;
     } catch (e) { st.rescored = false; }
