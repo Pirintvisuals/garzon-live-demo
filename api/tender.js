@@ -18,7 +18,7 @@ Három dolgot készít elő a cégvezetésnek és az árajánlatadónak.
    - a dokumentum és a tételjegyzék eltér egymástól (darabszám, részek száma, megnevezés, műszaki tartalom);
    - azonos terméknek látszó tételek leírása a tételjegyzéken belül eltér (például más lapvastagság, más szelvény, más méret ugyanarra a korcsoportra);
    - a tételjegyzék valamit nem határoz meg, amit a dokumentum sem pótol.
-   Minden lehetséges problémát vegyen fel, ami az árat, a gyártást vagy az ajánlat érvényességét érintheti, de mindegyikhez adjon "valoszinuseg" értéket (0-100): mennyire valószínű, hogy tényleg hiba vagy kockázat, amire reagálni kell (90-100 biztos, 60-89 valószínű, 30-59 lehetséges, 0-29 inkább nem). A kiírás által szándékosan megengedett választás („VAGY”, „egyenértékű”) nem hiba, legfeljebb 25. Ne ismételje a tételenkénti elírásokat.
+   Minden lehetséges problémát vegyen fel, ami az árat, a gyártást vagy az ajánlat érvényességét érintheti, de mindegyikhez adjon "valoszinuseg" értéket (0-100): mennyire valószínű, hogy tényleg hiba vagy kockázat, amire reagálni kell (90-100 biztos, 60-89 valószínű, 30-59 lehetséges, 0-29 inkább nem). Előtte a "ha_megsem_hiba" mezőbe írja le a legjobb ártatlan magyarázatot; ha az hihető, az érték 60 alatt legyen. A kiírás által szándékosan megengedett választás („VAGY”, „egyenértékű”) nem hiba, legfeljebb 25. Egy egyértelmű, teljesíthető kötelezettség (például útmutató átadása, igazolás csatolása) nem hiba, csak teendő: legfeljebb 30. Ne vegye fel azt, ami egyetlen tétel saját szövegén belüli ellentmondás vagy elírás (azt a tételenkénti ellenőrzés már jelzi), csak azt, amihez a dokumentum vagy több tétel összevetése kell.
    Minden kiírásnál végezze el az alábbi ellenőrzéseket, és ami eltérést ad, azt vegye fel:
    a) Számolja meg a dokumentumban felsorolt teljesítési helyszíneket (címeket), és vesse össze a részek számával. Az összefoglalóban a helyszínek számát a ténylegesen megszámolt címek alapján adja meg.
    b) Keressen a dokumentumban oda nem illő, más eljárásból bennmaradt követelményt (például a beszerzés tárgyához nem kapcsolódó szakmai minősítés, igazolás, tevékenység).
@@ -73,9 +73,11 @@ const SCHEMA = {
         forras: { type: 'STRING', enum: ['dokumentum', 'tetelegyzek'] },
         idezet: S.str,
         erintett_tetelek: { type: 'ARRAY', items: S.str },
+        ha_megsem_hiba: { type: 'STRING', description: 'A legjobb ártatlan magyarázat: miért lehet, hogy mégsem hiba' },
         valoszinuseg: { type: 'INTEGER', description: '0-100: mennyire valószínű, hogy tényleg hiba vagy kockázat' }
       },
-      required: ['cim', 'leiras', 'tipus', 'sulyossag', 'forras', 'idezet', 'erintett_tetelek', 'valoszinuseg']
+      required: ['cim', 'leiras', 'tipus', 'sulyossag', 'forras', 'idezet', 'erintett_tetelek', 'ha_megsem_hiba', 'valoszinuseg'],
+      propertyOrdering: ['cim', 'leiras', 'tipus', 'sulyossag', 'forras', 'idezet', 'erintett_tetelek', 'ha_megsem_hiba', 'valoszinuseg']
     }),
     kerdesek: S.arr({
       type: 'OBJECT',

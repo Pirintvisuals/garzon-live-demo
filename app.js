@@ -458,6 +458,7 @@
     const docs = st.tender ? st.tender.ellenorzes.map((f, i) => ({ kind: 'doc', p: probF(f), f, i })) : [];
     return [...groups.values(), ...docs].sort((x, y) => y.p - x.p);
   }
+  const whyNot = (t, p) => (t && p < 80 ? `<p class="whynot"><b>Lehet, hogy mégsem hiba:</b> ${esc(t)}</p>` : '');
   function findingHtml(x) {
     const bd = pband(x.p);
     const pb = `<span class="pbadge ${bd.cls}" title="Mennyire valószínű, hogy tényleg hiba">${x.p}% valószínű</span>`;
@@ -465,11 +466,11 @@
       const first = x.its[0];
       const title = x.its.length > 1 ? `${x.its.length} tétel: ${x.its.map(i => esc(i.name.trim())).join(', ')}` : `${esc(first.name)} <span class="muted" style="font-weight:400">· ${fmt(first.qty)} ${esc(first.unit)}</span>`;
       return `<div class="flag ${bd.cls}"><div class="flag-h">${pb}<span class="flag-id">${x.its.map(i => esc(i.id)).join(', ')}</span><span class="flag-type">${NOTE_TYPES[x.n.tipus] || ''}</span><span class="flag-title">${title}</span></div>
-        <div class="flag-b one"><div><p>${esc(x.n.szoveg)}</p>${quoteSrc(x.n.idezet, 'tetelegyzek', x.its.map(i => i.id))}</div></div></div>`;
+        <div class="flag-b one"><div><p>${esc(x.n.szoveg)}</p>${whyNot(x.n.ha_megsem_hiba, x.p)}${quoteSrc(x.n.idezet, 'tetelegyzek', x.its.map(i => i.id))}</div></div></div>`;
     }
     const f = x.f;
     return `<div class="flag ${bd.cls}"><div class="flag-h">${pb}<span class="flag-id">E-${String(x.i + 1).padStart(2, '0')}</span><span class="flag-type">${FIND_TYPES[f.tipus] || ''}</span><span class="flag-title">${esc(f.cim)}</span></div>
-      <div class="flag-b one"><div><p>${esc(f.leiras)}</p>${quoteSrc(f.idezet, f.forras, f.erintett_tetelek)}
+      <div class="flag-b one"><div><p>${esc(f.leiras)}</p>${whyNot(f.ha_megsem_hiba, x.p)}${quoteSrc(f.idezet, f.forras, f.erintett_tetelek)}
       ${f.erintett_tetelek.length ? `<p class="muted small">Érintett tételek: ${f.erintett_tetelek.map(id => { const it = itemById(id); return it ? `<span class="badge grey" title="${esc(it.name)}">${esc(id)} ${esc(it.name)}</span>` : ''; }).join(' ')}</p>` : ''}</div></div></div>`;
   }
   function viewCheck() {

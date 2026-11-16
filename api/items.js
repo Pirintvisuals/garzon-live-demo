@@ -37,7 +37,15 @@ Szabályok:
   60-89: valószínűleg hiba vagy kétértelműség, ami az árat érinti.
   30-59: lehetséges probléma, érdemes megnézni, de lehet, hogy szándékos vagy szokásos megfogalmazás.
   0-29: valószínűleg nem hiba, csak figyelemre érdemes.
-  Legyen szigorú a magas értékekkel: ha a megfogalmazás szakmai szokás is lehet (például a szín oszlopba az anyagot is beleírják: „műbőr-türkíz”), ne adjon 60 fölöttit.
+  Mielőtt értéket ad, írja le a "ha_megsem_hiba" mezőbe a legjobb ártatlan magyarázatot (miért lehet, hogy a kiírás mégis rendben van). Ha az ártatlan magyarázat hihető, az érték 60 alatt legyen. 90 fölött csak akkor, ha ártatlan magyarázat nincs.
+  Mintaértékek:
+  - 70 cm széles szekrénybe 3 oszlop műanyag fiók: 90 (fizikailag nem fér el).
+  - Polc mélysége 600 cm, miközben a sáv 550-700 mm: 95 (nyilvánvaló mértékegység-elírás).
+  - Megnevezés „Fotel”, leírás „3 személyes kanapé”: 90.
+  - Leírás „szövettel kárpitozva”, szín „műbőr-türkíz”: 40 (a szín oszlop gyakran a színkártya nevét adja; tisztázni kell, de lehet szokásos megfogalmazás).
+  - Leírás „laminált bútorlap”, szín „Fémváz: RAL 1015”: 15 (a kettő a bútor különböző részére vonatkozik, nem ellentmondás).
+  - Szűk, de nem lehetetlen méret (például két oldalszekrény egy 100 cm-es asztal alatt): 50-65.
+  Ha ugyanaz a jelenség több tételnél előfordul, mindegyiknél ugyanazzal a szöveggel és értékkel jelezze.
 - A kiírás által szándékosan megengedett választási lehetőség („VAGY”, „vagy azzal egyenértékű”, „konfigurációs szabadság”, méretsáv) NEM hiba. Ha mégis árazási döntést kíván, legfeljebb 25-ös valószínűséggel jelezze.
 - Számolási állítást (oszthatóság, összeg, különbség) csak akkor tegyen, ha a számolást a szövegben le is írja, és ellenőrizte; ha a számolás helyes, ne jelezze hibaként.
 - Ne ismételje ugyanazt a problémát más szavakkal ugyanannál a tételnél.
@@ -67,8 +75,9 @@ const SCHEMA = {
         biztonsag: S.int,
         eszrevetelek: S.arr({
           type: 'OBJECT',
-          properties: { tipus: { type: 'STRING', enum: ['ellentmondas', 'hiany', 'pontatlan'] }, szoveg: S.str, idezet: S.str, valoszinuseg: { type: 'INTEGER', description: '0-100: mennyire valószínű, hogy tényleg hiba' } },
-          required: ['tipus', 'szoveg', 'idezet', 'valoszinuseg']
+          properties: { tipus: { type: 'STRING', enum: ['ellentmondas', 'hiany', 'pontatlan'] }, szoveg: S.str, idezet: S.str, ha_megsem_hiba: { type: 'STRING', description: 'A legjobb ártatlan magyarázat: miért lehet, hogy mégsem hiba' }, valoszinuseg: { type: 'INTEGER', description: '0-100: mennyire valószínű, hogy tényleg hiba' } },
+          required: ['tipus', 'szoveg', 'idezet', 'ha_megsem_hiba', 'valoszinuseg'],
+          propertyOrdering: ['tipus', 'szoveg', 'idezet', 'ha_megsem_hiba', 'valoszinuseg']
         })
       },
       required: ['id', 'kategoria', 'szelesseg_mm', 'melyseg_mm', 'magassag_mm', 'anyag', 'gyarto', 'gyarto_indok', 'biztonsag', 'eszrevetelek']
