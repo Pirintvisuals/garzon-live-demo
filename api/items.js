@@ -19,7 +19,7 @@ Szabályok:
   "beszallitoi" = jellemzően készen vásárolt kereskedelmi termék (forgószék gázrugóval, műanyag szék, tábla, szőnyeg, gép, lámpa).
 - gyarto_indok: egy rövid mondat, a tétel szövegére hivatkozva.
 - biztonsag: 0-100, mennyire egyértelmű a tétel leírása az árazáshoz.
-- eszrevetelek: csak valódi, az árazást érintő gond. Típusok:
+- eszrevetelek: minden, ami lehetséges, hogy hibás vagy tisztázandó, az árazást vagy a gyártást érintően. Típusok:
   "ellentmondas" = a szöveg önmagának mond ellent (két eltérő méret, anyag vagy vastagság).
   "hiany" = árazáshoz szükséges adat hiányzik (méret, anyag, vastagság, szín, mennyiségi egység).
   "pontatlan" = elírás, értelmezhetetlen vagy kétértelmű megfogalmazás.
@@ -31,7 +31,16 @@ Szabályok:
   d) Van-e nyilvánvaló mértékegység-elírás (cm és mm felcserélése, irreális méret).
   e) A mennyiség egyértelmű-e, ha a tétel készlet, szett vagy több főre szóló összeállítás (hány darabot jelent 1 egység).
   f) Hivatkozik-e a leírás olyan mellékletre, rajzra, képre, amely nélkül a tétel nem árazható.
-- Egy tételhez legfeljebb 3 észrevétel, csak az, ami nélkül az árajánlatadó nem tud felelősen árazni, vagy ami félreértéshez vezethet. A fenti a) - f) típusú hibák fontosabbak, mint egy hiányzó adat.
+- Egy tételhez legfeljebb 3 észrevétel. A fenti a) - f) típusú hibák fontosabbak, mint egy hiányzó adat.
+- Minden észrevételhez adjon "valoszinuseg" mezőt (0-100): mennyire valószínű, hogy ez tényleg hiba vagy tisztázandó probléma, amire az árajánlatadónak reagálnia kell. Kalibrálás:
+  90-100: biztosan hiba (fizikailag lehetetlen, nyilvánvaló elírás, a megnevezés és a leírás egyértelműen mást mond, hivatkozott melléklet hiányzik).
+  60-89: valószínűleg hiba vagy kétértelműség, ami az árat érinti.
+  30-59: lehetséges probléma, érdemes megnézni, de lehet, hogy szándékos vagy szokásos megfogalmazás.
+  0-29: valószínűleg nem hiba, csak figyelemre érdemes.
+  Legyen szigorú a magas értékekkel: ha a megfogalmazás szakmai szokás is lehet (például a szín oszlopba az anyagot is beleírják: „műbőr-türkíz”), ne adjon 60 fölöttit.
+- A kiírás által szándékosan megengedett választási lehetőség („VAGY”, „vagy azzal egyenértékű”, „konfigurációs szabadság”, méretsáv) NEM hiba. Ha mégis árazási döntést kíván, legfeljebb 25-ös valószínűséggel jelezze.
+- Számolási állítást (oszthatóság, összeg, különbség) csak akkor tegyen, ha a számolást a szövegben le is írja, és ellenőrizte; ha a számolás helyes, ne jelezze hibaként.
+- Ne ismételje ugyanazt a problémát más szavakkal ugyanannál a tételnél.
 - NEM észrevétel: a lapanyag vastagságának hiánya, ha a kiírás terméket kér és nem gyártmánytervet; a mennyiségi egység hiánya, ha a darabszám egyértelmű.
 - NEM észrevétel: iskolabútornál a korcsoport megadása a méretet helyettesíti (ne jelezze hiányként a szék vagy asztal méretét, ha korcsoport szerepel); az állítható méret (tartomány) nem pontatlanság; kereskedelmi terméknél (beszállítói) a részletes szerkezeti adat hiánya nem gond. A méret megjegyzésbe ne ismételje meg az észrevételt.
 - Ha a tétel leírása rendben van, az eszrevetelek üres tömb.
@@ -58,8 +67,8 @@ const SCHEMA = {
         biztonsag: S.int,
         eszrevetelek: S.arr({
           type: 'OBJECT',
-          properties: { tipus: { type: 'STRING', enum: ['ellentmondas', 'hiany', 'pontatlan'] }, szoveg: S.str, idezet: S.str },
-          required: ['tipus', 'szoveg', 'idezet']
+          properties: { tipus: { type: 'STRING', enum: ['ellentmondas', 'hiany', 'pontatlan'] }, szoveg: S.str, idezet: S.str, valoszinuseg: { type: 'INTEGER', description: '0-100: mennyire valószínű, hogy tényleg hiba' } },
+          required: ['tipus', 'szoveg', 'idezet', 'valoszinuseg']
         })
       },
       required: ['id', 'kategoria', 'szelesseg_mm', 'melyseg_mm', 'magassag_mm', 'anyag', 'gyarto', 'gyarto_indok', 'biztonsag', 'eszrevetelek']
@@ -73,7 +82,7 @@ module.exports = async (req, res) => {
   try {
     const { part, items } = req.body || {};
     if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'Nincs tétel a kérésben.' });
-    if (items.length > 40) return res.status(400).json({ error: 'Egy kérésben legfeljebb 80 tétel küldhető.' });
+    if (items.length > 40) return res.status(400).json({ error: 'Egy kérésben legfeljebb 40 tétel küldhető.' });
     const user = 'Rész: ' + (part || '') + '\n\nTételek (JSON):\n' +
       JSON.stringify(items.map(i => ({ id: i.id, megnevezes: i.name, leiras: i.spec, mennyiseg: i.qty, egyseg: i.unit })), null, 1);
     const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, thinking: 'medium' });

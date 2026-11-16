@@ -257,3 +257,14 @@ table.ptable td { font-size: 12.5px; vertical-align: middle; }
 .calc table { background: var(--surface); }
 .warn-t { color: var(--amber-ink); margin-top: 2px; }
 @media (max-width: 1000px) { .ptypes { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .calc { grid-template-columns: minmax(0, 1fr); } }
+
+/* Hibák valószínűség szerint */
+.pbadge { display: inline-block; font: 600 11.5px var(--sans); padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.pbadge.pb-hi { background: #fbe3e3; color: #9a2f2f; border: 1px solid #e9b9b9; }
+.pbadge.pb-mid { background: var(--amber-bg); color: var(--amber-ink); border: 1px solid var(--amber-border); }
+.pbadge.pb-lo { background: #eef0f2; color: var(--muted); border: 1px solid var(--border); }
+.pbands { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
+.flag.pb-hi { border-left-color: #9a2f2f; }
+.flag.pb-lo { border-left-color: #b9c0c7; border-color: var(--border); }
+.flag.pb-lo .flag-h { background: var(--surface-2); border-bottom-color: var(--border); }
+.flag-h .pbadge { margin-right: 2px; }

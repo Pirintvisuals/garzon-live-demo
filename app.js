@@ -434,29 +434,63 @@
       list.map((i, n) => `${n + 1}. ${i.name}, ${fmt(i.qty)} ${i.unit}\n   ${i.spec}`).join('\n\n') + `\n\nKöszönettel:\nGarzon Bútor Zrt.`;
   }
 
-  /* ---------- Ellenőrizendő ---------- */
-  // Valódi hiba (ellentmondás, elírás) és egyszerű hiányzó adat szétválasztva: a hibák a fontosak.
-  const errorNotes = () => items().flatMap(it => notesOf(it).filter(n => n.tipus !== 'hiany').map(n => ({ it, n })));
+  /* ---------- Ellenőrizendő: minden lehetséges hiba, valószínűség szerint ---------- */
+  // Valószínűség: a modell adja (0-100). Régebbi eredménynél nincs ilyen mező: ott a súlyosságból becsüljük.
+  const SEV_P = { magas: 75, kozepes: 55, alacsony: 35 };
+  const probN = n => (Number.isFinite(n.valoszinuseg) ? n.valoszinuseg : 60);
+  const probF = f => (Number.isFinite(f.valoszinuseg) ? f.valoszinuseg : (SEV_P[f.sulyossag] || 50));
+  const errorNotes = () => items().flatMap(it => notesOf(it).filter(n => n.tipus !== 'hiany').map(n => ({ it, n, p: probN(n) }))).sort((x, y) => y.p - x.p);
   const missingNotes = () => items().flatMap(it => notesOf(it).filter(n => n.tipus === 'hiany').map(n => ({ it, n })));
+  const PBANDS = [
+    { min: 80, label: 'Szinte biztos hiba', cls: 'pb-hi', note: '80–100%' },
+    { min: 50, label: 'Valószínű hiba', cls: 'pb-mid', note: '50–79%' },
+    { min: 0, label: 'Érdemes megnézni', cls: 'pb-lo', note: '50% alatt: lehet szándékos vagy szokásos megfogalmazás' }
+  ];
+  const pband = p => PBANDS.find(b => p >= b.min);
+  // Az összes találat egy listában: a tételek hibái (azonos szövegűek összevonva) és a dokumentum-összevetés megállapításai.
+  function allFindings() {
+    const groups = new Map();
+    for (const { it, n, p } of errorNotes()) {
+      const key = n.tipus + '|' + n.szoveg.trim().toLowerCase();
+      if (!groups.has(key)) groups.set(key, { kind: 'item', p, n, its: [] });
+      const g = groups.get(key); g.its.push(it); g.p = Math.max(g.p, p);
+    }
+    const docs = st.tender ? st.tender.ellenorzes.map((f, i) => ({ kind: 'doc', p: probF(f), f, i })) : [];
+    return [...groups.values(), ...docs].sort((x, y) => y.p - x.p);
+  }
+  function findingHtml(x) {
+    const bd = pband(x.p);
+    const pb = `<span class="pbadge ${bd.cls}" title="Mennyire valószínű, hogy tényleg hiba">${x.p}% valószínű</span>`;
+    if (x.kind === 'item') {
+      const first = x.its[0];
+      const title = x.its.length > 1 ? `${x.its.length} tétel: ${x.its.map(i => esc(i.name.trim())).join(', ')}` : `${esc(first.name)} <span class="muted" style="font-weight:400">· ${fmt(first.qty)} ${esc(first.unit)}</span>`;
+      return `<div class="flag ${bd.cls}"><div class="flag-h">${pb}<span class="flag-id">${x.its.map(i => esc(i.id)).join(', ')}</span><span class="flag-type">${NOTE_TYPES[x.n.tipus] || ''}</span><span class="flag-title">${title}</span></div>
+        <div class="flag-b one"><div><p>${esc(x.n.szoveg)}</p>${quoteSrc(x.n.idezet, 'tetelegyzek', x.its.map(i => i.id))}</div></div></div>`;
+    }
+    const f = x.f;
+    return `<div class="flag ${bd.cls}"><div class="flag-h">${pb}<span class="flag-id">E-${String(x.i + 1).padStart(2, '0')}</span><span class="flag-type">${FIND_TYPES[f.tipus] || ''}</span><span class="flag-title">${esc(f.cim)}</span></div>
+      <div class="flag-b one"><div><p>${esc(f.leiras)}</p>${quoteSrc(f.idezet, f.forras, f.erintett_tetelek)}
+      ${f.erintett_tetelek.length ? `<p class="muted small">Érintett tételek: ${f.erintett_tetelek.map(id => { const it = itemById(id); return it ? `<span class="badge grey" title="${esc(it.name)}">${esc(id)} ${esc(it.name)}</span>` : ''; }).join(' ')}</p>` : ''}</div></div></div>`;
+  }
   function viewCheck() {
     const el = $('#view-ellenorzes');
     const c = counts();
     if (!st.tender && !c.read) { el.innerHTML = waiting('Az ellenőrzés'); return; }
-    const errs = errorNotes(), miss = missingNotes();
-    let h = `<div class="view-head"><div><h2>Hibák a kiírásban</h2><p>Az ajánlatkérő táblázata és dokumentumai gyakran hibásak: elírás, ellentmondás, hiányzó adat. Ha ezek rejtve maradnak, rossz terméket áraznak be. Minden találat mellett ott az eredeti szöveg, a „Forrás” gombbal egy kattintással ellenőrizhető.</p></div></div>`;
-    h += `<h4 class="sec">1. Hibák a tételekben: ellentmondás, elírás (${errs.length})</h4>`;
-    h += errs.map(({ it, n }) => `<div class="flag"><div class="flag-h"><span class="flag-id">${esc(it.id)}</span><span class="flag-type">${NOTE_TYPES[n.tipus] || ''}</span><span class="flag-title">${esc(it.name)} <span class="muted" style="font-weight:400">· ${fmt(it.qty)} ${esc(it.unit)}</span></span></div>
-      <div class="flag-b one"><div><p>${esc(n.szoveg)}</p>${quoteSrc(n.idezet, 'tetelegyzek', [it.id])}</div></div></div>`).join('') || `<div class="card"><div class="card-b muted">${c.read ? 'Nem talált ellentmondást a tételekben.' : 'Készül…'}</div></div>`;
-    h += `<h4 class="sec">2. A feltételek és a tételjegyzék összevetése${st.tender ? ` (${c.findings})` : ''}</h4>`;
-    if (!st.tender) h += waiting('Az összevetés');
-    else h += st.tender.ellenorzes.map((f, n) => `<div class="flag"><div class="flag-h"><span class="flag-id">E-${String(n + 1).padStart(2, '0')}</span><span class="flag-type">${FIND_TYPES[f.tipus] || ''}</span><span class="badge ${SEV[f.sulyossag].cls}">${SEV[f.sulyossag].label}</span><span class="flag-title">${esc(f.cim)}</span></div>
-      <div class="flag-b one"><div><p>${esc(f.leiras)}</p>${quoteSrc(f.idezet, f.forras, f.erintett_tetelek)}
-      ${f.erintett_tetelek.length ? `<p class="muted small">Érintett tételek: ${f.erintett_tetelek.map(id => { const it = itemById(id); return it ? `<span class="badge grey" title="${esc(it.name)}">${esc(id)} ${esc(it.name)}</span>` : ''; }).join(' ')}</p>` : ''}</div></div></div>`).join('') || '<div class="card"><div class="card-b muted">Nincs megállapítás.</div></div>';
-    h += `<h4 class="sec">3. Hiányzó adatok (${miss.length})</h4><div class="card"><div class="tbl-wrap"><table class="compact"><thead><tr><th>Tétel</th><th>Megnevezés</th><th>Mi hiányzik</th><th>Hely</th></tr></thead><tbody>
+    const all = allFindings(), miss = missingNotes();
+    let h = `<div class="view-head"><div><h2>Hibák a kiírásban</h2><p>Minden, ami lehet, hogy hibás, valószínűség szerint rendezve.</p></div></div>`;
+    h += `<div class="pbands">${PBANDS.map(bd => `<span class="pbadge ${bd.cls}">${bd.label}: ${all.filter(x => pband(x.p) === bd).length}</span>`).join('')}<span class="muted small">A program minden lehetséges hibát felvet, és megbecsüli, mennyire valószínű, hogy tényleg hiba. A „Forrás” gombbal ellenőrizhető.</span></div>`;
+    for (const bd of PBANDS) {
+      const list = all.filter(x => pband(x.p) === bd);
+      if (!list.length) continue;
+      h += `<h4 class="sec">${bd.label} <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">(${bd.note})</span></h4>` + list.map(findingHtml).join('');
+    }
+    if (!all.length) h += `<div class="card"><div class="card-b muted">${c.read ? 'Nem talált hibát.' : 'Készül…'}</div></div>`;
+    h += `<h4 class="sec">Hiányzó adatok (${miss.length})</h4><div class="card"><div class="tbl-wrap"><table class="compact"><thead><tr><th>Tétel</th><th>Megnevezés</th><th>Mi hiányzik</th><th>Hely</th></tr></thead><tbody>
       ${miss.map(({ it, n }) => `<tr><td class="code">${esc(it.id)}</td><td>${esc(it.name)}</td><td>${esc(n.szoveg)}</td><td class="muted nowrap">${esc(it.sheet)}, ${it.row}. sor</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nincs hiányzó adat.</td></tr>'}
       </tbody></table></div></div>`;
     el.innerHTML = h;
   }
+
 
   /* ---------- Árazás: első árvázlat tételtípusonként, mintaárakkal (pricing.js) ---------- */
   const ft = n => Math.round(n).toLocaleString('hu-HU') + ' Ft';
