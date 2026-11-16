@@ -850,8 +850,11 @@
         const isDoc = q => (q.doc != null ? q.doc : st.tender.ellenorzes.some(f => q.miert.startsWith(f.cim + ':')));
         const all = (onlyMissing ? st.tender.kerdesek.map(q => ({ ...q, doc: isDoc(q) })) : []).concat(qs);
         // Egyetlen tételt érintő dokumentum-kérdés kimarad, ha arra a tételre már van tétel-kérdés (ugyanazt kérdezné).
+        // A megmaradó tétel-kérdés megkapja a kimaradó dokumentum-kérdés valószínűségét, ha az nagyobb (a sorrend miatt).
         const itemQ = new Set(all.filter(q => !q.doc).flatMap(q => q.erintett_tetelek));
-        st.tender.kerdesek = all.filter(q => !(q.doc && q.erintett_tetelek.length === 1 && itemQ.has(q.erintett_tetelek[0])))
+        const dropped = all.filter(q => q.doc && q.erintett_tetelek.length === 1 && itemQ.has(q.erintett_tetelek[0]));
+        for (const d of dropped) for (const q of all) if (!q.doc && q.erintett_tetelek.includes(d.erintett_tetelek[0])) q.valoszinuseg = Math.max(q.valoszinuseg, d.valoszinuseg);
+        st.tender.kerdesek = all.filter(q => !dropped.includes(q))
           .sort((x, y) => y.valoszinuseg - x.valoszinuseg);
       }
       st.rescored = true;
