@@ -230,7 +230,7 @@
   /* ---------- Teendők: mit kell tenni ezzel az ajánlatkéréssel (az eredményekből összeállítva) ---------- */
   function todoList() {
     const all = items(), n = test => all.filter(i => test(makerOf(i))).length;
-    const blocked = [...new Set(errorNotes().map(e => e.it.id))].length;
+    const blocked = [...new Set(errorNotes().filter(e => e.p >= 50).map(e => e.it.id))].length;
     const work = [];
     if (st.tender && st.tender.kerdesek.length) work.push({ id: 'w-kerdes', text: `${st.tender.kerdesek.length} kérdés elküldése az ajánlatkérőnek`, hint: 'A levél vázlata kész; a kiegészítő tájékoztatás kérésének határideje a kiírásban szerepel.', tab: 'kerdesek' });
     if (blocked) work.push({ id: 'w-hiba', text: `${blocked} hibás vagy ellentmondásos tétel tisztázása árazás előtt`, hint: 'Ezeket a válasz megérkezéséig érdemes feltételesen árazni.', tab: 'ellenorzes' });
@@ -256,11 +256,12 @@
     const o = st.tender.osszefoglalo, c = counts();
     const byMaker = Object.keys(MAKERS).map(k => ({ k, n: items().filter(i => makerOf(i) === k).length, q: qtyText(items().filter(i => makerOf(i) === k)) })).filter(x => x.n);
     let h = `<div class="view-head"><div><h2>${esc(o.targy)}</h2><p>${esc(o.ajanlatkero)}${o.eljaras ? ' · ' + esc(o.eljaras) : ''}</p></div></div>`;
-    const errs = errorNotes(), top = errs.slice(0, 3);
+    const allF = allFindings(), sure = allF.filter(x => x.p >= 50), top = sure.slice(0, 3);
+    const fTitle = x => x.kind === 'item' ? (x.its.length > 1 ? x.its.length + ' tétel' : x.its[0].name.trim()) : x.f.cim;
     h += `<p class="lead" style="margin-bottom:14px">${esc(o.rovid_leiras)}</p>`;
     h += `<div class="hub">
-      <div class="hubc warn"><div class="hub-n">${errs.length + c.findings}</div><div class="hub-t">hibát vagy tisztázandó pontot talált a kiírásban</div>
-        <ul>${top.map(({ it, n }) => `<li><b>${esc(it.name.trim())}:</b> ${esc(n.szoveg)}</li>`).join('') || '<li class="muted">Nem talált ellentmondást a tételekben.</li>'}</ul>
+      <div class="hubc warn"><div class="hub-n">${sure.length}</div><div class="hub-t">biztos vagy valószínű hibát talált a kiírásban${allF.length > sure.length ? `, és ${allF.length - sure.length} további pontot, amit érdemes megnézni` : ''}</div>
+        <ul>${top.map(x => `<li><b>${esc(fTitle(x))}:</b> ${esc(x.kind === 'item' ? x.n.szoveg : x.f.leiras)} <span class="muted">(${x.p}%)</span></li>`).join('') || '<li class="muted">Nem talált valószínű hibát.</li>'}</ul>
         <button class="btn btn-primary" data-tab="ellenorzes">Mind megnézem</button></div>
       <div class="hubc"><div class="hub-n">${c.questions}</div><div class="hub-t">kérdést készített elő az ajánlatkérőnek</div>
         <ul>${st.tender.kerdesek.slice(0, 2).map(q => `<li>${esc(cleanQ(q.kerdes).slice(0, 150))}${cleanQ(q.kerdes).length > 150 ? '…' : ''}</li>`).join('')}</ul>
@@ -455,7 +456,12 @@
       if (!groups.has(key)) groups.set(key, { kind: 'item', p, n, its: [] });
       const g = groups.get(key); g.its.push(it); g.p = Math.max(g.p, p);
     }
-    const docs = st.tender ? st.tender.ellenorzes.map((f, i) => ({ kind: 'doc', p: probF(f), f, i })) : [];
+    // A dokumentum-összevetés néha megismétli egy tétel saját ellentmondását: ha ugyanazt a tételt ugyanazzal az idézettel érinti, nem mutatjuk kétszer.
+    const nz = t => String(t || '').toLowerCase().replace(/\s+/g, ' ');
+    const frs = t => nz(t).split(/\s*(?:\[\.{3}\]|\.{3,}|…)\s*/).filter(fr => fr.length >= 12);
+    const overlap = (a, b) => frs(a).some(fr => nz(b).includes(fr)) || frs(b).some(fr => nz(a).includes(fr));
+    const dup = f => f.erintett_tetelek.length === 1 && [...groups.values()].some(g => g.its.some(i => i.id === f.erintett_tetelek[0]) && overlap(g.n.idezet, f.idezet));
+    const docs = st.tender ? st.tender.ellenorzes.map((f, i) => ({ kind: 'doc', p: probF(f), f, i })).filter(x => !dup(x.f)) : [];
     return [...groups.values(), ...docs].sort((x, y) => y.p - x.p);
   }
   const whyNot = (t, p) => (t && p < 80 ? `<p class="whynot"><b>Lehet, hogy mégsem hiba:</b> ${esc(t)}</p>` : '');
@@ -915,7 +921,7 @@
     st.book.parts.forEach(p => { st.partStatus[p.no] = 'ok'; }); st.tenderStatus = s.tender ? 'ok' : 'idle';
     st.tab = 'osszefoglalo'; render();
   }
-  root.App.snapshot = snapshot; root.App.rfqText = rfqText; root.App.questionsText = () => (st.tender ? questionsText() : '');
+  root.App.snapshot = snapshot; root.App.rescore = rescore; root.App.rfqText = rfqText; root.App.questionsText = () => (st.tender ? questionsText() : '');
   root.App.helpers = { items, makerOf, notesOf, dims, counts, earlierFlags, priceOf, todoList, NOTE_TYPES, SEV, FIND_TYPES, IMPACT };
 
   /* ---------- események ---------- */
