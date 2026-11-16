@@ -46,6 +46,16 @@
     arazas: ['Első árvázlat tételtípusonként: katalógus, beszállítói, saját gyártás, egyedi. Mintaárakkal: azt mutatja, hogyan készülne.', 'Nyisson meg egy „Számítás” gombot, és állítsa a haszon és a kockázati felár mértékét. A végső árat mindig a kolléga hagyja jóvá.'],
     revizio: ['Ha az ajánlatkérő később javított tételjegyzéket küld: pontosan mi változott?', 'Töltse fel az új táblázatot. A változások tételenként, színnel jelölve látszanak.']
   };
+  // Mi lenne más az éles, a Garzonra szabott rendszerben (oldalanként egy-két sor, ígéret nélkül).
+  const LIVE = {
+    osszefoglalo: 'Az Önök saját fájljain fut, nem előre lefuttatott mintán. Az „érdemes-e indulni” szempontjait (például kötbér, határidő, minimális összeg) Önök adják meg.',
+    ellenorzes: 'A kollégák jelölik, melyik találat volt valódi hiba és melyik nem. Ez alapján finomítjuk a szabályokat és a valószínűségeket az Önök kiírásaira.',
+    kerdesek: 'Az Önök levélsablonjával készül, és a kolléga pipálja ki, melyik kérdés menjen el.',
+    tetelek: 'A tételeket az Önök termékeihez és termékkódjaihoz párosítja, a gyártási besorolást pedig az Önök üzemeihez igazítjuk.',
+    bontas: 'A listák abban a formában mennek tovább, ahogy az üzemek és a beszállítók ma is kapják (például Excel).',
+    arazas: 'A mintaárak helyére az Önök árlistája, anyagárai és kalkulációs szabályai kerülnek, így az árvázlat az Önök árszintjén készül.',
+    revizio: 'Az árazott ajánlatban is megjelöli, mely tételek árát kell a módosítás miatt újraszámolni.'
+  };
   const IMPACT = { igen: { label: 'Árat érinti', cls: 'neg' }, lehet: { label: 'Árat érintheti', cls: 'warn' }, nem: { label: 'Csak pontosítás', cls: 'grey' } };
 
   // Minták: nyilvános közbeszerzések dokumentumai.
@@ -126,7 +136,7 @@
     if (!g || !st.book) return;
     const idx = TABS.findIndex(t => t.id === st.tab), next = TABS[idx + 1];
     el.classList.add('guided');
-    el.insertAdjacentHTML('afterbegin', `<div class="guide"><span class="g-n">${idx + 1}</span><div><div class="g-what">${esc(g[0])}</div><div class="g-do"><b>Mit tegyen itt:</b> ${esc(g[1])}</div></div></div>`);
+    el.insertAdjacentHTML('afterbegin', `<div class="guide"><span class="g-n">${idx + 1}</span><div><div class="g-what">${esc(g[0])}</div><div class="g-do"><b>Mit tegyen itt:</b> ${esc(g[1])}</div>${LIVE[st.tab] ? `<div class="g-live"><b>Az éles rendszerben:</b> ${esc(LIVE[st.tab])}</div>` : ''}</div></div>`);
     el.insertAdjacentHTML('beforeend', next
       ? `<div class="nextbar" style="--sec:${SEC[next.id]}"><span>Következő lépés</span><button class="btn nextbtn" data-tab="${next.id}"><span class="tn">${idx + 2}</span>${next.label} →</button></div>`
       : `<div class="nextbar"><span>Ez az utolsó lépés. Az előkészített munkafüzet a jobb felső gombbal letölthető, az árazás abban folytatható.</span></div>`);
