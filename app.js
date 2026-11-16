@@ -461,7 +461,8 @@
   const whyNot = (t, p) => (t && p < 80 ? `<p class="whynot"><b>Lehet, hogy mégsem hiba:</b> ${esc(t)}</p>` : '');
   function findingHtml(x) {
     const bd = pband(x.p);
-    const pb = `<span class="pbadge ${bd.cls}" title="Mennyire valószínű, hogy tényleg hiba">${x.p}% valószínű</span>`;
+    const why = (x.n || x.f).pont_indok;
+    const pb = `<span class="pbadge ${bd.cls}" title="${esc(why ? 'Miért ennyi: ' + why : 'Mennyire valószínű, hogy tényleg hiba')}">${x.p}% valószínű</span>`;
     if (x.kind === 'item') {
       const first = x.its[0];
       const title = x.its.length > 1 ? `${x.its.length} tétel: ${x.its.map(i => esc(i.name.trim())).join(', ')}` : `${esc(first.name)} <span class="muted" style="font-weight:400">· ${fmt(first.qty)} ${esc(first.unit)}</span>`;
@@ -784,6 +785,33 @@
     } catch (e) { st.tenderStatus = 'err'; st.tenderError = e.message; }
     render();
   }
+  // Második, szkeptikus kör: a felvetett hibák valószínűségét egy külön hívás pontozza újra.
+  // Azonos szövegű tételhibát egyszer küldünk. Ha a hívás nem sikerül, az első becslés marad.
+  async function rescore() {
+    const groups = new Map(), list = [];
+    for (const it of items()) for (const n of notesOf(it)) {
+      if (n.tipus === 'hiany') continue;
+      const key = n.tipus + '|' + n.szoveg.trim().toLowerCase();
+      if (!groups.has(key)) { groups.set(key, []); list.push({ id: 'n' + list.length, key, allitas: n.szoveg, idezet: n.idezet, ha_megsem_hiba: n.ha_megsem_hiba || '', kontextus: `${it.name} | ${it.qty} ${it.unit} | ${it.spec}` }); }
+      groups.get(key).push(n);
+    }
+    (st.tender ? st.tender.ellenorzes : []).forEach((f, i) => {
+      const ctx = f.erintett_tetelek.map(itemById).filter(Boolean).slice(0, 3).map(it => `${it.id} ${it.name}: ${it.spec}`).join('\n');
+      list.push({ id: 'd' + i, allitas: f.cim + ': ' + f.leiras, idezet: f.idezet, ha_megsem_hiba: f.ha_megsem_hiba || '', kontextus: ctx || f.idezet });
+    });
+    if (!list.length) return;
+    try {
+      const out = await api('score', { findings: list.map(({ key, ...f }) => f) });
+      for (const p of out.pontok || []) {
+        if (!Number.isFinite(p.valoszinuseg)) continue;
+        const src = list.find(f => f.id === p.id); if (!src) continue;
+        const targets = src.key ? groups.get(src.key) : [st.tender.ellenorzes[+p.id.slice(1)]];
+        for (const t of targets) { if (t.valoszinuseg_elso == null) t.valoszinuseg_elso = t.valoszinuseg; t.valoszinuseg = p.valoszinuseg; t.pont_indok = p.indok; }
+      }
+      st.rescored = true;
+    } catch (e) { st.rescored = false; }
+    render();
+  }
   async function pool(tasks, n) {
     const q = tasks.slice();
     await Promise.all(Array.from({ length: Math.min(n, q.length) }, async () => { while (q.length) await q.shift()(); }));
@@ -821,6 +849,7 @@
     const tick = setInterval(renderTimer, 500);
     render();
     await Promise.all([runTender(), pool(st.book.parts.map(p => () => runPart(p)), 10)]);
+    await rescore();
     clearInterval(tick);
     st.running = false; st.elapsedMs = Date.now() - st.startedAt;
     if (done() && st.tender) st.tab = 'osszefoglalo';
