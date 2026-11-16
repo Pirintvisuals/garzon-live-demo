@@ -23,16 +23,18 @@ Mintaértékek:
 - Szűk, de nem lehetetlen méret: 45-65.
 - Saját becslésre (például „egy dosszié kb. 320 mm”) épülő állítás: legfeljebb 65, hacsak a számolás minden adata a szövegben szerepel.
 - Számolási állítás: számolja újra; ha a számolás helyes és nincs ellentmondás, 0-10.
-indok: egy rövid mondat, miért ennyi. A válasz nyelve magyar. Minden kapott felvetéshez pontosan egy elemet adjon vissza, ugyanazzal az id-val.`;
+indok: egy rövid mondat, miért ennyi.
+kerdes: ha a valoszinuseg legalább 50, egy kérdés az ajánlatkérőnek (kiegészítő tájékoztatás-kérés), udvarias, hivatalos magyar megfogalmazásban, önállóan érthetően, a TÉTELEK sorban megadott rész- és tételszámra és megnevezésre hivatkozva. Megszólítás és elköszönés nélkül. Konkrétan kérdezzen rá a tisztázandó pontra, és ha van kézenfekvő helyes értelmezés, kérje annak megerősítését (például: „Kérjük megerősíteni, hogy a mélység helyesen 600 mm.”). Ha a valoszinuseg 50 alatti, a kerdes üres szöveg.
+A válasz nyelve magyar. Minden kapott felvetéshez pontosan egy elemet adjon vissza, ugyanazzal az id-val.`;
 
 const SCHEMA = {
   type: 'OBJECT',
   properties: {
     pontok: S.arr({
       type: 'OBJECT',
-      properties: { id: S.str, indok: S.str, valoszinuseg: S.int },
-      required: ['id', 'indok', 'valoszinuseg'],
-      propertyOrdering: ['id', 'indok', 'valoszinuseg']
+      properties: { id: S.str, indok: S.str, valoszinuseg: S.int, kerdes: S.str },
+      required: ['id', 'indok', 'valoszinuseg', 'kerdes'],
+      propertyOrdering: ['id', 'indok', 'valoszinuseg', 'kerdes']
     })
   },
   required: ['pontok']
@@ -44,7 +46,7 @@ module.exports = async (req, res) => {
     const list = (req.body && req.body.findings) || [];
     if (!list.length || list.length > 80) return res.status(400).json({ error: 'Egy kérésben 1 és 80 közötti felvetés küldhető.' });
     const cut = (x, n) => String(x || '').slice(0, n);
-    const user = list.map(f => `[${f.id}]\nFELVETÉS: ${cut(f.allitas, 600)}\nIDÉZET: ${cut(f.idezet, 300)}\nSZÖVEG: ${cut(f.kontextus, 2500)}\nÁRTATLAN MAGYARÁZAT: ${cut(f.ha_megsem_hiba, 400)}`).join('\n\n');
+    const user = list.map(f => `[${f.id}]\nTÉTELEK: ${cut(f.tetelek, 400) || 'nincs megadva'}\nFELVETÉS: ${cut(f.allitas, 600)}\nIDÉZET: ${cut(f.idezet, 300)}\nSZÖVEG: ${cut(f.kontextus, 2500)}\nÁRTATLAN MAGYARÁZAT: ${cut(f.ha_megsem_hiba, 400)}`).join('\n\n');
     const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, thinking: 'medium', maxOutputTokens: 16000 });
     res.status(200).json({ pontok: out.data.pontok || [], model: out.model });
   } catch (e) {

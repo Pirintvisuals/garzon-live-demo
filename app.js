@@ -793,26 +793,41 @@
   }
   // Második, szkeptikus kör: a felvetett hibák valószínűségét egy külön hívás pontozza újra.
   // Azonos szövegű tételhibát egyszer küldünk. Ha a hívás nem sikerül, az első becslés marad.
+  // A kérdések levele is ebből készül: minden legalább 50%-os hibához egy kérdés, valószínűség szerint.
+  const itemLabel = it => `${it.partNo}. rész ${String(it.id).split('/')[1] || it.id}. tétel (${it.name.trim()})`;
   async function rescore() {
     const groups = new Map(), list = [];
     for (const it of items()) for (const n of notesOf(it)) {
       if (n.tipus === 'hiany') continue;
       const key = n.tipus + '|' + n.szoveg.trim().toLowerCase();
-      if (!groups.has(key)) { groups.set(key, []); list.push({ id: 'n' + list.length, key, allitas: n.szoveg, idezet: n.idezet, ha_megsem_hiba: n.ha_megsem_hiba || '', kontextus: `${it.name} | ${it.qty} ${it.unit} | ${it.spec}` }); }
-      groups.get(key).push(n);
+      if (!groups.has(key)) { groups.set(key, { notes: [], its: [] }); list.push({ id: 'n' + list.length, key, allitas: n.szoveg, idezet: n.idezet, ha_megsem_hiba: n.ha_megsem_hiba || '', kontextus: `${it.name} | ${it.qty} ${it.unit} | ${it.spec}` }); }
+      const g = groups.get(key); g.notes.push(n); if (!g.its.includes(it)) g.its.push(it);
     }
+    list.forEach(f => { if (f.key) f.tetelek = groups.get(f.key).its.map(itemLabel).join('; '); });
     (st.tender ? st.tender.ellenorzes : []).forEach((f, i) => {
-      const ctx = f.erintett_tetelek.map(itemById).filter(Boolean).slice(0, 3).map(it => `${it.id} ${it.name}: ${it.spec}`).join('\n');
-      list.push({ id: 'd' + i, allitas: f.cim + ': ' + f.leiras, idezet: f.idezet, ha_megsem_hiba: f.ha_megsem_hiba || '', kontextus: ctx || f.idezet });
+      const its = f.erintett_tetelek.map(itemById).filter(Boolean);
+      const ctx = its.slice(0, 3).map(it => `${it.id} ${it.name}: ${it.spec}`).join('\n');
+      list.push({ id: 'd' + i, tetelek: its.map(itemLabel).join('; '), allitas: f.cim + ': ' + f.leiras, idezet: f.idezet, ha_megsem_hiba: f.ha_megsem_hiba || '', kontextus: ctx || f.idezet });
     });
     if (!list.length) return;
     try {
       const out = await api('score', { findings: list.map(({ key, ...f }) => f) });
+      const qs = [];
       for (const p of out.pontok || []) {
         if (!Number.isFinite(p.valoszinuseg)) continue;
         const src = list.find(f => f.id === p.id); if (!src) continue;
-        const targets = src.key ? groups.get(src.key) : [st.tender.ellenorzes[+p.id.slice(1)]];
+        const doc = src.key ? null : st.tender.ellenorzes[+p.id.slice(1)];
+        const targets = src.key ? groups.get(src.key).notes : [doc];
         for (const t of targets) { if (t.valoszinuseg_elso == null) t.valoszinuseg_elso = t.valoszinuseg; t.valoszinuseg = p.valoszinuseg; t.pont_indok = p.indok; }
+        const ids = src.key ? groups.get(src.key).its.map(i => i.id) : doc.erintett_tetelek;
+        if (p.valoszinuseg >= 50 && p.kerdes && p.kerdes.trim()) qs.push({ kerdes: p.kerdes.trim(), miert: src.allitas, erintett_tetelek: ids, valoszinuseg: p.valoszinuseg, doc: !src.key });
+      }
+      if (st.tender && qs.length) {
+        if (!st.tender.kerdesek_elso) st.tender.kerdesek_elso = st.tender.kerdesek;
+        // Egyetlen tételt érintő dokumentum-kérdés kimarad, ha arra a tételre már van tétel-kérdés (ugyanazt kérdezné).
+        const itemQ = new Set(qs.filter(q => !q.doc).flatMap(q => q.erintett_tetelek));
+        st.tender.kerdesek = qs.filter(q => !(q.doc && q.erintett_tetelek.length === 1 && itemQ.has(q.erintett_tetelek[0])))
+          .sort((x, y) => y.valoszinuseg - x.valoszinuseg).map(({ doc, ...q }) => q);
       }
       st.rescored = true;
     } catch (e) { st.rescored = false; }
