@@ -11,7 +11,7 @@
       const a = App.state.ai[it.id] || {};
       const r = startRow + n;
       return [it.id, it.part, it.name, it.spec, a.kategoria || '', a.szelesseg_mm || '', a.melyseg_mm || '', a.magassag_mm || '', a.anyag || '', a.vaz || '', a.szin || '',
-        a.gyarto ? MAKERS[a.gyarto].label : '', it.qty, it.unit, (H.priceOf(it) || {}).avg || '', { f: `M${r}*O${r}` },
+        a.gyarto ? MAKERS[a.gyarto].label : '', it.qty, it.unit, ((App.state.ai[it.id] && H.priceOf(it)) || {}).avg || '', { f: `M${r}*O${r}` },
         H.notesOf(it).map(x => x.szoveg).join(' | '), `${it.sheet}, ${it.row}. sor`];
     });
   }
@@ -51,6 +51,7 @@
       XLSX.utils.book_append_sheet(wb, sheet([['Tétel', 'Rész', 'Megnevezés', 'Változás', 'Mi változott', 'Árhatás', 'Régi menny.', 'Új menny.', 'Régi leírás', 'Új leírás', 'A program az eredetinél jelezte'], ...rows],
         [8, 20, 26, 12, 50, 16, 10, 10, 60, 60, 50]), 'Revízió');
     }
+    if (window.Egyezes && Egyezes.ready()) Egyezes.appendSheets(wb);
     const td = H.todoList();
     XLSX.utils.book_append_sheet(wb, sheet([['Kész', 'Teendő', 'Megjegyzés'], ...td.work.map(t => [st.todo[t.id] ? 'x' : '', t.text, t.hint || '']), [], ['Kész', 'Csatolandó dokumentum'], ...td.docs.map(t => [st.todo[t.id] ? 'x' : '', t.text])], [6, 70, 70]), 'Teendők');
     XLSX.writeFile(wb, 'ajanlatkeres_elokeszites.xlsx');

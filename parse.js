@@ -9,25 +9,28 @@
   function findHeader(rows) {
     for (let r = 0; r < Math.min(rows.length, 25); r++) {
       const cells = (rows[r] || []).map(low);
-      if (cells.some(c => /megnevez/.test(c)) && cells.some(isQtyHeader)) return r;
+      if (cells.some(isNameHeader) && cells.some(isQtyHeader)) return r;
     }
     return -1;
   }
   // Mennyiség oszlop: „Mennyiség”, vagy maga az egység a fejléc („db”, „darab”, „menny.”).
+  // Megnevezés oszlop: „Megnevezés”, vagy generálkivitelezői táblázatban „Tétel szövege”.
+  const isNameHeader = c => /megnevez|tétel ?szöveg|termék ?specifik/.test(c);
   const isQtyHeader = c => (/mennyis/.test(c) && !/egys/.test(c)) || /^(db|darab|menny\.?|db\.)$/.test(c);
 
   function mapColumns(header) {
     const h = header.map(low);
     const first = test => h.findIndex(test);
-    const spec = first(c => /specifik|műszaki leírás|műszaki tartalom|leírás/.test(c));
+    const nameCol = first(isNameHeader);
+    const spec = h.findIndex((c, i) => i !== nameCol && /specifik|műszaki leírás|műszaki tartalom|leírás/.test(c) && !/megajánlott|paraméter/.test(c));
     // A műszaki tartalomhoz tartozó további oszlopok (szín, helyszín, anyag stb.), az ár- és nyilatkozatoszlopok nélkül.
-    const extra = h.map((c, i) => (i !== spec && /^(szín|helyszín|anyag|felület|méret|megjegyzés|rajz)/.test(c)) ? i : -1).filter(i => i >= 0);
+    const extra = h.map((c, i) => (i !== spec && /^(szín|helyszín|anyag|felület|méret|megjegyzés|rajz|alaprajzi jel)/.test(c) && !/ár|egységár|összesen|díj/.test(c)) ? i : -1).filter(i => i >= 0);
     return {
       no: first(c => /^(s(or)?sz|sorsz|ssz|tétel ?sz)/.test(c)),
-      name: first(c => /megnevez/.test(c)),
+      name: first(isNameHeader),
       spec, extra,
       qty: first(isQtyHeader),
-      unit: first(c => /egys/.test(c) && /(mennyis|mérték)/.test(c))
+      unit: first(c => (/egys/.test(c) && /(mennyis|mérték)/.test(c)) || /^egység.?$/.test(c))
     };
   }
 

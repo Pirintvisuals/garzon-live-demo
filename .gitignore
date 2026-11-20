@@ -7,3 +7,5 @@ node_modules/
 minta/_*
 HIVAS-*.md
 HIVAS-*.docx
+*.zip
+data/_*

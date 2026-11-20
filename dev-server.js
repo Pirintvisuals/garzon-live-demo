@@ -29,7 +29,7 @@ http.createServer(async (req, res) => {
   if (url.pathname === '/__save' && req.method === 'POST') {
     const chunks = [];
     req.on('data', c => chunks.push(c));
-    req.on('end', () => { fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true }); fs.writeFileSync(path.join(ROOT, 'data', 'mentett.json'), Buffer.concat(chunks)); res.json({ ok: true }); });
+    req.on('end', () => { fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true }); const nm = url.searchParams.get('name'); const file = nm && /^_[a-z0-9]+$/.test(nm) ? nm + '.json' : 'mentett.json'; fs.writeFileSync(path.join(ROOT, 'data', file), Buffer.concat(chunks)); res.json({ ok: true }); });
     return;
   }
 
@@ -41,7 +41,7 @@ http.createServer(async (req, res) => {
     req.on('data', c => { raw += c; });
     req.on('end', async () => {
       // Helyi kulcs nélkül a kérést az élő telepítés szolgálja ki (a jelszót a böngésző küldi).
-      if (!process.env.GEMINI_API_KEY) {
+      if (!process.env.GEMINI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
         try {
           const r = await fetch((process.env.REMOTE_API || 'https://garzon-live-demo.vercel.app') + '/api/' + name, { method: 'POST', headers: { 'content-type': 'application/json', 'x-demo-key': req.headers['x-demo-key'] || '' }, body: raw });
           res.statusCode = r.status; res.setHeader('content-type', 'application/json; charset=utf-8'); return res.end(await r.text());

@@ -26,6 +26,7 @@
 
   const TABS = [
     { id: 'feltoltes', label: 'Feltöltés' },
+    { id: 'egyezes', label: 'Egyezés' },
     { id: 'osszefoglalo', label: 'Eredmény' },
     { id: 'ellenorzes', label: 'Hibák a kiírásban' },
     { id: 'kerdesek', label: 'Kérdések' },
@@ -34,9 +35,15 @@
     { id: 'revizio', label: 'Módosítás érkezett' }
   ];
   // Minden résznek saját színe van: ugyanaz a szín a folyamatábrán, a fülön és az oldal tetején.
-  const SEC = { feltoltes: '#5d6873', osszefoglalo: '#2f5866', ellenorzes: '#b7791f', kerdesek: '#2b6cb0', tetelek: '#a8763e', bontas: '#a8763e', arazas: '#2c6845', revizio: '#6b4f9a' };
+  const SEC = { feltoltes: '#5d6873', egyezes: '#8a3b2e', osszefoglalo: '#2f5866', ellenorzes: '#b7791f', kerdesek: '#2b6cb0', tetelek: '#a8763e', bontas: '#a8763e', arazas: '#2c6845', revizio: '#6b4f9a' };
   // Mire jó az oldal, és mit érdemes rajta csinálni.
+  // Generálkivitelezői munkánál néhány oldal mást csinál.
+  const GUIDE_GK = {
+    kerdesek: ['A rajz, a konszignáció és a tételjegyzék eltéréseiből kész levél a generálkivitelezőnek.', 'Olvassa át, másolja ki, szerkessze, és küldje el árazás előtt.'],
+    arazas: ['Első árvázlat tételtípusonként, mintaárakkal. Felül a tételjegyzékből hiányzó tételek, a soroknál az eltérések.', 'Ami hiányzik vagy eltér, arra előbb kérdezzen rá; a többi tételnél nyissa meg a „Számítás” gombot.']
+  };
   const GUIDE = {
+    egyezes: ['A rajz, a konszignáció és a tételjegyzék összevetése alaprajzi jel szerint: mi hiányzik, mi tér el darabszámban vagy méretben.', 'Kezdje a legmagasabb valószínűségű sorokkal. A „Rajzon” gomb megmutatja a jelet a tervlapon, a „Táblázat” az eredeti sort. Az eltérések Excelben letölthetők.'],
     osszefoglalo: ['Egy pillantásra: mit talált a program ebben az ajánlatkérésben.', 'Nézze át a négy kártyát. Lent a vezetésnek szóló rész: a szerződés feltételei és kockázatai alapján érdemes-e ajánlatot adni.'],
     ellenorzes: ['Hol hibás vagy ellentmondásos az ajánlatkérő listája. Ha ez rejtve marad, rossz terméket áraznak be.', 'A „Forrás” gombbal nyissa meg az eredeti szöveget, és döntse el, melyik hibára kell rákérdezni.'],
     kerdesek: ['A talált hibákból kész levél az ajánlatkérőnek (kiegészítő tájékoztatás-kérés).', 'Olvassa át, másolja ki, szerkessze, és küldje el.'],
@@ -47,6 +54,7 @@
   };
   // Mi lenne más az éles, a Garzonra szabott rendszerben (oldalanként egy-két sor, ígéret nélkül).
   const LIVE = {
+    egyezes: 'Szkennelt tervlapokat is olvas (rajzolvasóval), és az Önök jelölési szokásaihoz igazodik. Az eltérésekből kérdés kerül a generálkivitelezőnek szóló levélbe.',
     osszefoglalo: 'Az Önök saját fájljain fut, nem előre lefuttatott mintán. Az „érdemes-e indulni” szempontjait (például kötbér, határidő, minimális összeg) Önök adják meg.',
     ellenorzes: 'A kollégák jelölik, melyik találat volt valódi hiba és melyik nem. Ez alapján finomítjuk a szabályokat és a valószínűségeket az Önök kiírásaira.',
     kerdesek: 'Az Önök levélsablonjával készül, és a kolléga pipálja ki, melyik kérdés menjen el.',
@@ -71,6 +79,19 @@
     }
   };
 
+  // Az ügyfél saját anyaga csak helyben van meg: a minta/_helyi.js (git-ignored) adja meg a fájlokat és a gombok feliratát.
+  // A nyilvános telepítésben ez a fájl nincs, ezért ott ezek a gombok nem jelennek meg.
+  const HELYI = root.HELYI || {};
+  if (HELYI.kozb) SAMPLES.helyi_kozb = HELYI.kozb;
+  const GK = (HELYI.gk && HELYI.gk.files) || [];
+  async function loadGk() {
+    if (st.running) return;
+    const files = await Promise.all(GK.map(u => getFile(u, decodeURIComponent(u.split('/').pop()))));
+    st = fresh(); Egyezes.reset(); mode = 'gk'; render();
+    // A tételjegyzék a többi lépéshez is betöltődik (hibák, kérdések, gyártás); az összevetés a PDF-ekből és a táblázatból készül.
+    await Promise.all([setFile('sheet', files[0]), Egyezes.addFiles(files.slice(1))]);
+    st.tab = 'egyezes'; render();
+  }
   const fresh = () => ({
     sample: '', rev: null, prices: {}, pricing: { margin: 12, risk: 0, open: {} }, todo: {}, replay: null, replayed: false, chatCache: {}, chat: { open: false, msgs: [], draft: '' },
     tab: 'feltoltes', files: { sheet: null, doc: null }, book: null, doc: null, docIndex: null,
@@ -78,12 +99,17 @@
     docs: [], reading: '', running: false, startedAt: 0, elapsedMs: 0, model: '', filter: { maker: '', part: '', onlyNotes: false }, fromSaved: false
   });
   let st = fresh();
-  root.App = { get state() { return st; }, MAKERS };
+  // Munkatípus: közbeszerzés (tételjegyzék + kiírás) vagy generálkivitelezői munka (tételjegyzék + konszignáció + tervlapok).
+  let mode = 'kozbeszerzes';
+  const tabs = () => TABS.filter(t => t.id !== 'egyezes' || mode === 'gk');
+  root.App = { get state() { return st; }, MAKERS, render: () => render() };
 
   /* ---------- számított adatok ---------- */
   const items = () => (st.book ? st.book.items : []);
   const makerOf = it => (st.ai[it.id] && st.ai[it.id].gyarto) || '';
-  const notesOf = it => (st.ai[it.id] && st.ai[it.id].eszrevetelek) || [];
+  // A „gyártmányterv alapján” a gyártó feladata (az asztalos készíti), nem hiányzó adat: ezt a modell néha hiánynak veszi.
+  const shopDrawing = (it, n) => n.tipus === 'hiany' && /gyártmányterv/i.test(n.szoveg) && /gyártmányterv alapján/i.test(it.name + ' ' + it.spec);
+  const notesOf = it => ((st.ai[it.id] && st.ai[it.id].eszrevetelek) || []).filter(n => !shopDrawing(it, n));
   const done = () => items().length > 0 && items().every(it => st.ai[it.id]);
   const itemById = id => items().find(i => i.id === id);
   function counts() {
@@ -103,17 +129,17 @@
   const stepOf = tab => (tab === 'tetelek' ? 'bontas' : tab);
   function renderChrome() {
     const c = counts();
-    $('#tabs').innerHTML = TABS.map(t => {
+    $('#tabs').innerHTML = tabs().map(t => {
       // A füleken csak a lépés sorszáma látszik; a darabszámok az oldalakon vannak (két szám egymás mellett összezavaró volt).
       const cnt = '';
-      const disabled = t.id !== 'feltoltes' && !st.book;
-      return `<button class="tab" role="tab" data-tab="${t.id}" style="--sec:${SEC[t.id]}" aria-selected="${stepOf(st.tab) === t.id}" ${disabled ? 'disabled' : ''}><span class="tn">${TABS.indexOf(t) + 1}</span>${t.label}${cnt}</button>`;
+      const disabled = t.id === 'egyezes' ? !Egyezes.ready() : (t.id !== 'feltoltes' && !st.book);
+      return `<button class="tab" role="tab" data-tab="${t.id}" style="--sec:${SEC[t.id]}" aria-selected="${stepOf(st.tab) === t.id}" ${disabled ? 'disabled' : ''}><span class="tn">${tabs().indexOf(t) + 1}</span>${t.label}${cnt}</button>`;
     }).join('');
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + st.tab));
-    const title = st.tender ? st.tender.osszefoglalo.targy : (st.book ? st.book.fileName : 'Nincs betöltött ajánlatkérés');
+    const title = st.tender ? st.tender.osszefoglalo.targy : ((mode === 'gk' && Egyezes.projectName()) || (st.book ? st.book.fileName : 'Nincs betöltött ajánlatkérés'));
     const meta = st.book ? `${c.parts} rész · ${c.items} tétel · ${esc(qtyText(items()))}` + (st.doc ? ` · ${esc(st.doc.fileName)}` : '') : 'Töltse fel a tételjegyzéket és a kiírás dokumentumát.';
     $('#proj-head').innerHTML = `<div class="proj-title">${esc(title)}</div><div class="proj-meta">${meta}</div>`;
-    $('#btn-xlsx').hidden = !done();
+    $('#btn-xlsx').hidden = !(done() || (mode === 'gk' && st.book && Egyezes.ready()));
     $('#btn-new').hidden = !st.book;
     renderTimer();
   }
@@ -126,16 +152,16 @@
 
   function render() {
     renderChrome();
-    ({ feltoltes: viewUpload, osszefoglalo: viewBrief, tetelek: viewItems, bontas: viewSplit, ellenorzes: viewCheck, kerdesek: viewQuestions, arazas: viewPricing, revizio: viewRevision })[st.tab]();
+    ({ feltoltes: viewUpload, egyezes: Egyezes.view, osszefoglalo: viewBrief, tetelek: viewItems, bontas: viewSplit, ellenorzes: viewCheck, kerdesek: viewQuestions, arazas: viewPricing, revizio: viewRevision })[st.tab]();
     decorate();
     renderChat();
   }
   // Az aktív oldal kerete: felül, mire jó és mit érdemes tenni; alul, mi a következő lépés.
   function decorate() {
-    const el = $('#view-' + st.tab), g = GUIDE[st.tab];
+    const el = $('#view-' + st.tab), g = (mode === 'gk' && GUIDE_GK[st.tab]) || GUIDE[st.tab];
     el.style.setProperty('--sec', SEC[st.tab]);
-    if (!g || !st.book) return;
-    const idx = TABS.findIndex(t => t.id === stepOf(st.tab)), next = TABS[idx + 1];
+    if (!g || !(st.book || (st.tab === 'egyezes' && Egyezes.ready()))) return;
+    const T = tabs(), idx = T.findIndex(t => t.id === stepOf(st.tab)), next = T[idx + 1];
     el.classList.add('guided');
     const back = st.tab === 'tetelek' ? `<button class="btn btn-sm g-back" data-tab="bontas">← Vissza az üzemenkénti bontáshoz</button>` : '';
     el.insertAdjacentHTML('afterbegin', `<div class="guide"><span class="g-n">${idx + 1}</span><div>${back}<div class="g-what">${esc(g[0])}</div><div class="g-do"><b>Mit tegyen itt:</b> ${esc(g[1])}</div>${LIVE[st.tab] ? `<div class="g-live"><b>Az éles rendszerben:</b> ${esc(LIVE[st.tab])}</div>` : ''}</div></div>`);
@@ -147,10 +173,19 @@
   const waiting = what => `<div class="card"><div class="card-b empty">${st.running ? '<span class="spin"></span> ' + what + ' készül…' : 'Még nincs feldolgozott adat. Indítsa el a feldolgozást a Feltöltés fülön.'}</div></div>`;
 
   /* ---------- Feltöltés ---------- */
+  const probed = {};
+  function probe(url, sel) {
+    const show = () => { const b = $(sel); if (b && probed[url] === true) b.hidden = false; };
+    if (url in probed) { if (probed[url] !== 'wait') show(); return; }
+    probed[url] = 'wait';
+    fetch(url, { method: 'HEAD' }).then(r => { probed[url] = r.ok; show(); }).catch(() => { probed[url] = false; });
+  }
   function viewUpload() {
     const c = counts();
     const f = st.files;
-    let h = `<div class="view-head"><div><h2>Ajánlatkérés feltöltése</h2>
+    const modeBtn = (k, t, s) => `<button class="mode-b ${mode === k ? 'on' : ''}" data-mode="${k}" ${st.running ? 'disabled' : ''}><b>${t}</b><span>${s}</span></button>`;
+    let h = `<div class="modes">${modeBtn('kozbeszerzes', 'Közbeszerzés', 'tételjegyzék és kiírás (műszaki leírás, szerződéstervezet)')}${modeBtn('gk', 'Generálkivitelezői munka', 'tételjegyzék, konszignáció és tervlapok')}</div>`;
+    h += `<div class="view-head"><div><h2>Ajánlatkérés feltöltése</h2>
       <p>Két fájl kell: a tételjegyzék (Excel) és a kiírás dokumentuma (PDF vagy Word: műszaki leírás, szerződéstervezet). A program beolvassa a tételeket, oszlopokra bontja a leírásokat, szétosztja őket gyártás szerint, összeveti a dokumentummal, és előkészíti a kérdéseket. Ár nem kerül bele.</p></div></div>`;
     const outBtn = (id, title, sub) => `<button class="fl-out" style="--sec:${SEC[id]}" data-tab="${id}" ${st.book ? '' : 'disabled'}><b>${title}</b><span>${sub}</span></button>`;
     h += `<div class="flow">
@@ -182,11 +217,15 @@
         ${st.reading ? `<div class="drop-s"><span class="spin"></span> ${esc(st.reading)}</div>` : ''}
         ${st.doc ? `<div class="drop-s">${st.docs.length} dokumentum · ${st.docIndex.paras.length.toLocaleString('hu-HU')} bekezdés${st.docs.some(d => d.scanned) ? ' · szkennelt PDF szövegfelismeréssel' : ''}</div>${st.docs.filter(d => d.failedPages && d.failedPages.length).map(d => `<div class="drop-i">${esc(d.fileName)}: ${d.failedPages.length} oldal nem volt olvasható (${d.failedPages.join(', ')}. oldal).</div>`).join('')}` : ''}</label>
     </div>`;
+    if (mode === 'gk') h += Egyezes.dropHtml();
     h += `<div class="card"><div class="card-b actions">
       <button class="btn btn-primary btn-lg" id="btn-run" ${st.book && !st.running ? '' : 'disabled'}>${st.running ? 'Feldolgozás folyamatban…' : (done() ? 'Feldolgozás újra' : 'Feldolgozás indítása')}</button>
       <span class="muted small">Nincs kéznél fájl? Próbálja ki egy valódi, nyilvános közbeszerzésen:</span>
       <button class="btn ${st.sample === 'szeged' ? 'on' : ''}" data-sample="szeged" ${st.running ? 'disabled' : ''}>${st.sample === 'szeged' ? '✓ Betöltve: ' : 'Minta: '}Szegedi Szakképzési Centrum, bútorbeszerzés 2026</button>
       <button class="btn btn-sm ${st.sample === 'debrecen' ? 'on' : ''}" data-sample="debrecen" ${st.running ? 'disabled' : ''}>${st.sample === 'debrecen' ? '✓ Betöltve: ' : 'Másik minta: '}Debrecen, 2018</button>
+      ${HELYI.kozb ? `<button class="btn btn-sm" data-sample="helyi_kozb" id="btn-kozb" hidden>${esc(HELYI.kozb.label)}</button>` : ''}
+      ${GK.length ? `<button class="btn btn-sm" id="btn-gk" hidden>${esc(HELYI.gk.label)}</button>` : ''}
+      ${GK.length ? `<button class="btn btn-sm" id="btn-gk-saved" hidden>Tartalék: korábbi feldolgozás</button>` : ''}
       <button class="btn" id="btn-saved" hidden>Korábban feldolgozott eredmény megnyitása</button>
     </div></div>`;
     if (st.book && (st.running || c.read || st.tenderStatus !== 'idle')) {
@@ -200,7 +239,11 @@
     if (st.book && st.book.skipped.length) h += `<p class="muted small">Tétel nélküli munkalapok (kihagyva): ${st.book.skipped.map(esc).join(', ')}</p>`;
     if (st.book && !st.running && !c.read) h += previewTable();
     $('#view-feltoltes').innerHTML = h;
-    fetch('data/mentett.json', { method: 'HEAD' }).then(r => { const b = $('#btn-saved'); if (b && r.ok) b.hidden = false; }).catch(() => {});
+    // Helyi fájlok megléte: egyszer kérdezzük le, utána emlékszünk rá (ne legyen minden rajzolásnál új kérés).
+    probe('data/mentett.json', '#btn-saved');
+    if (HELYI.kozb) probe(HELYI.kozb.sheet[0], '#btn-kozb');
+    if (GK.length && mode === 'gk' && st.book) probe('data/_gk.json', '#btn-gk-saved');
+    if (GK.length) probe(GK[0], '#btn-gk');
   }
   // Ismeretlen szerkezetű táblázatnál megmutatjuk, mit minek olvasott a program.
   function colInfo() {
@@ -532,14 +575,25 @@
     if (p.detail) return `<div class="calc"><table class="compact sch"><tbody>${p.detail.map(r => `<tr><td>${esc(r[0])}</td><td class="num">${ft(r[1])}</td></tr>`).join('')}<tr class="total"><td>Nettó egységár (vázlat)</td><td class="num">${ft(p.unit)}</td></tr></tbody></table></div>`;
     return '';
   }
+  // A tételjegyzékből hiányzó, de a konszignációban vagy a rajzon szereplő jelek: árazás előtt rákérdezni.
+  function gkMissingHtml() {
+    const list = Egyezes.missingGroups();
+    if (!list.length) return '';
+    return `<div class="card eg-miss"><div class="card-h"><h3>Nincs a tételjegyzékben: rákérdezni árazás előtt (${list.length})</h3><button class="btn btn-sm" data-tab="kerdesek">Kérdés a generálkivitelezőnek →</button></div>
+      <div class="card-b"><p class="muted small" style="margin:0 0 8px">Ezek a konszignációban vagy a tervlapokon szerepelnek, de a tételjegyzékben nincs soruk. Ha az ajánlat része, az ára most kimaradna; ha más alvállalkozó árazza, ezt a generálkivitelezőnek kell megerősítenie.</p>
+      <div class="tbl-wrap"><table class="compact"><thead><tr><th>Jel</th><th>Megnevezés</th><th class="num">Konszignáció</th><th class="num">Rajzon</th></tr></thead><tbody>
+      ${list.map(g => `<tr><td class="code">${g.codes.map(esc).join(', ')}</td><td>${esc(g.name)}</td><td class="num">${g.kQty == null ? '–' : fmt(g.kQty) + ' ' + esc(g.unit)}</td><td class="num">${g.pCount ? g.pCount + ' hely' : '–'}</td></tr>`).join('')}
+      </tbody></table></div></div></div>`;
+  }
   function viewPricing() {
     const el = $('#view-arazas');
-    if (!items().some(i => st.ai[i.id])) { el.innerHTML = waiting('Az árvázlat'); return; }
+    const gkMiss = mode === 'gk' && Egyezes.ready() ? gkMissingHtml() : '';
+    if (!items().some(i => st.ai[i.id])) { el.innerHTML = gkMiss + waiting('Az árvázlat'); return; }
     const all = priced(), T = Pricing.TYPES;
     const sum = list => list.reduce((s, x) => s + (x.p.unit || 0) * x.it.qty, 0);
     const byType = k => all.filter(x => x.p.type === k);
     let h = `<div class="view-head"><div><h2>Árazás: első árvázlat</h2></div></div>
-      <div class="sample-note"><b>Minden szám mintaérték.</b> Ez az oldal azt mutatja meg, <b>hogyan</b> készülne el az első árvázlat tételtípusonként. Az éles változatban az Önök árlistája, normaidői és kalkulációs sémája kerülne ide, és minden árat a kolléga hagy jóvá.</div>`;
+      ${gkMiss}<div class="sample-note"><b>Minden szám mintaérték.</b> Ez az oldal azt mutatja meg, <b>hogyan</b> készülne el az első árvázlat tételtípusonként. Az éles változatban az Önök árlistája, normaidői és kalkulációs sémája kerülne ide, és minden árat a kolléga hagy jóvá.</div>`;
     h += `<div class="ptypes">${['katalogus', 'beszallitoi', 'gyartott', 'egyedi'].map(k => { const l = byType(k); return `<div class="ptype ${T[k].cls}"><div class="pt-n">${l.length}</div><div class="pt-l">${T[k].label}</div><div class="pt-h">${esc(T[k].how)}</div>${k === 'egyedi' ? '' : `<div class="pt-s">${ft(sum(l))}</div>`}</div>`; }).join('')}
       <div class="ptype t-piac"><div class="pt-l">Piaci döntés: mindig az Önöké</div><div class="pt-h">Haszon és kockázati felár (kötbér, határidő, verseny). A program ezt nem találja ki.</div>
         <label class="pin-l">Haszon <span><input class="pin sm" type="number" min="0" max="60" step="1" value="${st.pricing.margin}" data-pmargin> %</span></label>
@@ -551,7 +605,7 @@
       if (it.partNo !== last) { last = it.partNo; h += `<tr class="zone-row"><td colspan="7">${esc(it.part)}</td></tr>`; }
       const open = st.pricing.open[it.id];
       h += `<tr><td class="code">${esc(it.id)}</td><td><b>${esc(it.name)}</b></td><td class="num">${fmt(it.qty)} ${esc(it.unit)}</td>
-        <td><span class="badge ${T[p.type].cls}">${T[p.type].label}</span> <span class="muted small">${esc(p.reason || T[p.type].how)}</span>${p.warn ? `<div class="warn-t small">⚠ ${esc(p.warn)}</div>` : ''}</td>
+        <td><span class="badge ${T[p.type].cls}">${T[p.type].label}</span> <span class="muted small">${esc(p.reason || T[p.type].how)}</span>${p.warn ? `<div class="warn-t small">⚠ ${esc(p.warn)}</div>` : ''}${mode === 'gk' ? Egyezes.flagsForRow(it.row).map(f => `<div class="neg-t small">⚠ ${esc(f.t)}: ${esc(f.d)}</div>`).join('') : ''}</td>
         <td class="num">${p.unit ? ft(p.unit) : '<span class="faint">kolléga</span>'}</td><td class="num">${p.unit ? ft(p.unit * it.qty) : ''}</td>
         <td>${p.unit ? `<button class="btn btn-sm" data-pcalc="${esc(it.id)}">${open ? 'Bezár' : 'Számítás'}</button>` : ''}</td></tr>`;
       if (open && p.unit) h += `<tr class="calc-row"><td></td><td colspan="6">${calcHtml(p)}</td></tr>`;
@@ -568,10 +622,19 @@
     return `Tisztelt Ajánlatkérő!\n\nA(z) „${o.targy}” tárgyú eljárásban az alábbi kiegészítő tájékoztatást kérjük:\n\n` +
       st.tender.kerdesek.map((q, n) => `${n + 1}. ${cleanQ(q.kerdes)}`).join('\n\n') + `\n\nVálaszukat előre is köszönjük.\n\nTisztelettel:\nGarzon Bútor Zrt.`;
   }
+  // Generálkivitelezői munkánál: kérdések a generálkivitelezőnek az Egyezés eltéréseiből (kód állítja össze, MI nélkül).
+  function gkQuestionsHtml() {
+    const q = Egyezes.questions();
+    if (!q.length) return '';
+    return `<div class="view-head"><div><h2>Kérdések a generálkivitelezőnek</h2><p>A rajz, a konszignáció és a tételjegyzék eltéréseiből, a legbiztosabbak elöl. Küldés előtt az árajánlatadó átnézi és szerkeszti.</p></div><button class="btn btn-primary" id="btn-copy-gk">Levél szövegének másolása</button></div>
+      <div class="grid g-main"><div class="card"><div class="card-b qs">${q.map((x, n) => `<div class="q"><span class="q-n">${n + 1}.</span><div><p class="q-k">${esc(x.kerdes)}</p><p class="muted small"><span class="pbadge ${pband(x.p).cls}">${x.p}%</span> Miért kell: ${esc(x.miert)}</p></div></div>`).join('')}</div></div>
+      <div class="card"><div class="card-h"><h3>Levél vázlata</h3></div><div class="card-b"><pre class="mail-pre">${esc(Egyezes.letter())}</pre></div></div></div>`;
+  }
   function viewQuestions() {
     const el = $('#view-kerdesek');
-    if (!st.tender) { el.innerHTML = waiting('A kérdéslista'); return; }
-    let h = `<div class="view-head"><div><h2>Kérdések az ajánlatkérőnek</h2><p>Kiegészítő tájékoztatás-kérés vázlata. Küldés előtt az árajánlatadó átnézi és szerkeszti.</p></div><button class="btn btn-primary" id="btn-copy-q">Levél szövegének másolása</button></div>`;
+    const gk = mode === 'gk' && Egyezes.ready() ? gkQuestionsHtml() : '';
+    if (!st.tender) { el.innerHTML = gk || waiting('A kérdéslista'); return; }
+    let h = gk + `<div class="view-head"><div><h2>Kérdések az ajánlatkérőnek</h2><p>Kiegészítő tájékoztatás-kérés vázlata. Küldés előtt az árajánlatadó átnézi és szerkeszti.</p></div><button class="btn btn-primary" id="btn-copy-q">Levél szövegének másolása</button></div>`;
     h += `<div class="grid g-main"><div class="card"><div class="card-b qs">${st.tender.kerdesek.map((q, n) => `<div class="q"><span class="q-n">${n + 1}.</span><div><p class="q-k">${esc(cleanQ(q.kerdes))}</p><p class="muted small">Miért kell: ${esc(q.miert)}${q.erintett_tetelek.length ? ' · Tételek: ' + q.erintett_tetelek.map(esc).join(', ') : ''}</p></div></div>`).join('')}</div></div>
       <div class="card"><div class="card-h"><h3>Levél vázlata</h3></div><div class="card-b"><pre class="mail-pre">${esc(questionsText())}</pre></div></div></div>`;
     el.innerHTML = h;
@@ -896,6 +959,12 @@
     if (!st.book || st.running) return;
     if (canReplay()) return replayRun();
     st.ai = {}; st.tender = null; st.partStatus = {}; st.tenderStatus = 'idle'; st.fromSaved = false; st.replayed = false;
+    // Generálkivitelezői munkánál a tételhez tartozó konszignációs lap is a leírás része lesz (méret, anyag, felület).
+    if (mode === 'gk' && Egyezes.ready()) items().forEach(it => {
+      if (it.konsz) return;
+      const k = Egyezes.konszTextForRow(it.row);
+      if (k) { it.konsz = true; it.spec = (it.spec ? it.spec + ' | ' : '') + k; }
+    });
     st.running = true; st.startedAt = Date.now(); st.elapsedMs = 0;
     const tick = setInterval(renderTimer, 500);
     render();
@@ -918,6 +987,7 @@
     try {
       if (kind === 'sheet') {
         st.files.sheet = file; st.book = null; st.detecting = true; rawFiles[file.name] = file; render();
+        Egyezes.trySheet(file);
         try { st.book = await Parse.readWorkbook(await file.arrayBuffer(), file.name, sheets => api('columns', { sheets })); } finally { st.detecting = false; }
         st.ai = {}; st.tender = null; st.rev = null; st.partStatus = {}; st.tenderStatus = 'idle'; st.elapsedMs = 0;
         if (!st.book.items.length) { alert('Ebben a táblázatban nem találtam tételjegyzéket.' + (st.book.aiError ? ' (' + st.book.aiError + ')' : '')); st.book = null; st.files.sheet = null; }
@@ -950,7 +1020,7 @@
   const getFile = async (url, name) => new File([await (await fetch(url)).blob()], name);
   async function loadSample(key) {
     const S = SAMPLES[key]; if (!S || st.running) return;
-    st = fresh(); st.sample = key; render();
+    st = fresh(); st.sample = key; mode = 'kozbeszerzes'; Egyezes.reset(); render();
     await setFile('sheet', await getFile(S.sheet[0], S.sheet[1]));
     await setFile('doc', await Promise.all(S.docs.map(d => getFile(d[0], d[1]))));
     // Ha ehhez a mintához van előre feldolgozott eredmény, a feldolgozás azt játssza vissza (API nélkül).
@@ -992,14 +1062,19 @@
     else if (t.id === 'btn-rev-sample') { const S = SAMPLES[st.sample]; getFile(S.rev[0], S.rev[1]).then(setRevision); }
     else if (t.id === 'btn-rev-retry') summarizeRevision();
     else if (t.id === 'btn-saved') fetch('data/mentett.json').then(r => r.json()).then(restore).catch(() => alert('A mentett eredmény nem tölthető be.'));
-    else if (t.id === 'btn-new') { if (!st.running) { st = fresh(); render(); } }
+    else if (t.id === 'btn-new') { if (!st.running) { st = fresh(); Egyezes.reset(); render(); } }
+    else if (t.id === 'btn-gk') loadGk();
+    // Tartalék, ha élőben nem érhető el a feldolgozás: a korábbi futás eredménye (helyben, data/_gk.json).
+    else if (t.id === 'btn-gk-saved') fetch('data/_gk.json').then(r => r.json()).then(s => { restore(s); st.replay = null; render(); }).catch(() => alert('A korábbi feldolgozás nem tölthető be.'));
+    else if (t.dataset.mode) { mode = t.dataset.mode; if (st.tab === 'egyezes' && mode !== 'gk') st.tab = 'feltoltes'; render(); }
+    else if (t.id === 'btn-copy-gk') copy(Egyezes.letter(), t);
     else if (t.dataset.retry) retry(t.dataset.retry);
     else if (t.id === 'btn-copy-q') copy(questionsText(), t);
     else if (t.id === 'btn-rfq') copy(rfqText(), t);
   });
   document.addEventListener('change', e => {
     const t = e.target;
-    if (t.type === 'file' && t.files[0]) { const k = t.closest('.drop').dataset.kind; if (k === 'rev') setRevision(t.files[0]); else { if (k === 'sheet') st.sample = ''; setFile(k, k === 'doc' ? [...t.files] : t.files[0]); } }
+    if (t.type === 'file' && t.files[0]) { const k = t.closest('.drop').dataset.kind; if (k === 'egyezes') Egyezes.addFiles([...t.files]); else if (k === 'rev') setRevision(t.files[0]); else { if (k === 'sheet') st.sample = ''; setFile(k, k === 'doc' ? [...t.files] : t.files[0]); } }
     else if (t.dataset.maker) { st.ai[t.dataset.maker].gyarto = t.value; st.ai[t.dataset.maker].gyarto_indok = 'Kézzel átállítva.'; render(); }
     else if (t.id === 'f-part') { st.filter.part = t.value; render(); }
     else if (t.id === 'f-maker') { st.filter.maker = t.value; render(); }
@@ -1012,7 +1087,8 @@
     const d = e.target.closest && e.target.closest('.drop'); if (!d) return;
     e.preventDefault();
     if (ev === 'drop' && e.dataTransfer.files[0]) {
-      if (d.dataset.kind === 'rev') setRevision(e.dataTransfer.files[0]);
+      if (d.dataset.kind === 'egyezes') Egyezes.addFiles([...e.dataTransfer.files]);
+      else if (d.dataset.kind === 'rev') setRevision(e.dataTransfer.files[0]);
       else { if (d.dataset.kind === 'sheet') st.sample = ''; setFile(d.dataset.kind, d.dataset.kind === 'doc' ? [...e.dataTransfer.files] : e.dataTransfer.files[0]); }
     }
   }));

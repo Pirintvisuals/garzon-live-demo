@@ -48,7 +48,8 @@ module.exports = async (req, res) => {
     if (!list.length || list.length > 80) return res.status(400).json({ error: 'Egy kérésben 1 és 80 közötti felvetés küldhető.' });
     const cut = (x, n) => String(x || '').slice(0, n);
     const user = list.map(f => `[${f.id}]\nTÉTELEK: ${cut(f.tetelek, 400) || 'nincs megadva'}\nFELVETÉS: ${cut(f.allitas, 600)}\nIDÉZET: ${cut(f.idezet, 300)}\nSZÖVEG: ${cut(f.kontextus, 2500)}\nÁRTATLAN MAGYARÁZAT: ${cut(f.ha_megsem_hiba, 400)}`).join('\n\n');
-    const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, thinking: 'medium', maxOutputTokens: 16000 });
+    // A valószínűség pontozása az erősebb modellel: a gyengébb modell a valódi hibákat is alulpontozta.
+    const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, thinking: 'medium', maxOutputTokens: 16000, tier: 'strong' });
     res.status(200).json({ pontok: out.data.pontok || [], model: out.model });
   } catch (e) {
     res.status(502).json({ error: String(e.message || e) });

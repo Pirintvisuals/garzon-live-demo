@@ -273,3 +273,33 @@ table.ptable td { font-size: 12.5px; vertical-align: middle; }
 .g-live { margin-top: 7px; padding-top: 7px; border-top: 1px dashed color-mix(in srgb, var(--sec) 35%, #fff); font-size: 12.5px; color: var(--muted); }
 .g-live b { color: var(--sec); font-weight: 600; }
 .g-back { margin-bottom: 8px; }
+
+/* ---------- Egyezés: rajz, konszignáció, tételjegyzék ---------- */
+.drop.wide { display: block; margin-top: 16px; }
+.eg-file { margin: 2px 0; }
+.eg-go { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 10px 0 16px; }
+table.eg-t td { vertical-align: top; }
+table.eg-t tr.eg-ok td { color: var(--muted); }
+.eg-f { margin: 1px 0 4px; line-height: 1.4; }
+.eg-f .pbadge { font-size: 11px; padding: 0 6px; }
+.eg-k { margin-bottom: 14px; }
+.eg-k pre { max-height: 260px; overflow: auto; white-space: pre-wrap; }
+.eg-modal { width: min(1400px, 96vw); max-width: 96vw; }
+.eg-modal .modal-b { padding: 8px; }
+.eg-zoom { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+.eg-canvas-wrap { position: relative; height: 72vh; overflow: auto; background: #fff; border: 1px solid var(--border); }
+.eg-stage { position: relative; display: inline-block; }
+.eg-stage canvas { display: block; }
+.eg-stage svg { position: absolute; left: 0; top: 0; pointer-events: none; }
+.eg-stage svg circle { fill: rgba(214, 40, 40, .10); stroke: #d62828; stroke-width: 3; }
+.eg-stage svg circle.cur { fill: rgba(214, 40, 40, .22); stroke-width: 6; }
+.eg-loading { position: absolute; top: 10px; left: 10px; background: var(--surface); padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; }
+.eg-loading[hidden] { display: none; }
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+.mode-b { appearance: none; text-align: left; border: 1px solid var(--border-strong); background: var(--surface); border-radius: var(--radius); padding: 12px 14px; cursor: pointer; font: inherit; color: inherit; }
+.mode-b b { display: block; font-size: 15px; }
+.mode-b span { color: var(--muted); font-size: 12.5px; }
+.mode-b.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+.eg-miss { border-color: #e9b9b9; }
+.eg-miss .card-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+@media (max-width: 640px) { .modes { grid-template-columns: 1fr; } }
