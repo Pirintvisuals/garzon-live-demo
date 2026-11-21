@@ -213,7 +213,8 @@
         }
       }
     }
-    return { kind: 'plan', fileName: file.name, label: planLabel(file.name), pages, hits };
+    const uniq = hits.filter((h, i) => !hits.slice(0, i).some(o => o.code === h.code && o.page === h.page && Math.abs(o.x - h.x) < 3 && Math.abs(o.y - h.y) < 3));
+    return { kind: 'plan', fileName: file.name, label: planLabel(file.name), pages, hits: uniq };
   }
   function planLabel(name) {
     const n = name.replace(/\.pdf$/i, '');
@@ -271,10 +272,14 @@
       if (havePlans && !onPlan && (inSheet || inKonsz)) f.push({ t: 'Nem található a tervlapokon', d: 'A jel egyik feltöltött tervlapon sem szerepel. Lehet, hogy egy fel nem töltött tervlapon van, vagy a rajzon más jelöléssel.', p: 50 });
       if (tjQty != null && kQty != null && Math.abs(tjQty - kQty) > 1e-6) f.push({ t: 'Eltérő mennyiség', d: `Tételjegyzék: ${fmt(tjQty)} ${unit}, konszignáció: ${fmt(kQty)} ${unit}.`, p: 90 });
       if (onPlan && countable) {
-        const ref = kQty != null ? kQty : tjQty;
+        const ref = kQty != null ? kQty : tjQty, src = kQty != null ? 'konszignáció' : 'tételjegyzék';
         if (ref != null && pCount !== ref) {
-          const parts = Object.keys(perPlan).length > 1 ? ' A jel több tervlapon is szerepel; ha a részletek átfedik egymást, egy darab kétszer is számolódhat.' : '';
-          f.push({ t: 'A rajzon más a darabszám', d: `A tervlapokon ${pCount} helyen szerepel a jel, a ${kQty != null ? 'konszignáció' : 'tételjegyzék'} ${fmt(ref)} ${unit}-ot ír.${parts} Egy jel több darabot is jelölhet (például szett).`, p: Math.abs(pCount - ref) >= 2 ? 70 : 55 });
+          const sheets = Object.keys(perPlan).length;
+          // A rajzi jelek száma nem mindig darabszám: egy jel jelölhet egy egész sort (például öltözőszekrény-sor),
+          // és két részletrajz átfedheti egymást. Ezért a valószínűség attól függ, melyik eset valószínű.
+          if (pCount < ref * 0.5) f.push({ t: 'A rajzon kevesebb jel', d: `A tervlapokon ${pCount} helyen szerepel a jel, a ${src} ${fmt(ref)} ${unit}-ot ír. Valószínűleg egy jel több darabot jelöl (például egy szekrénysort); érdemes a rajzon ellenőrizni.`, p: 35 });
+          else if (pCount > ref && sheets > 1) f.push({ t: 'A rajzon más a darabszám', d: `A tervlapokon ${pCount} helyen szerepel a jel (${Object.entries(perPlan).map(([k, v]) => k + ': ' + v).join(', ')}), a ${src} ${fmt(ref)} ${unit}-ot ír. A jel több részletrajzon is szerepel; ha a részletek átfedik egymást, ugyanaz a darab kétszer számolódik.`, p: 45 });
+          else f.push({ t: 'A rajzon más a darabszám', d: `A tervlapokon ${pCount} helyen szerepel a jel, a ${src} ${fmt(ref)} ${unit}-ot ír.`, p: Math.abs(pCount - ref) >= 2 ? 65 : 55 });
         }
       }
       // Méretek: konszignáció vs tételjegyzék (műszaki tartalom + tételszöveg)
@@ -415,7 +420,8 @@
   }
   function rowHtml(g, idx, planCols) {
     const per = Object.entries(g.perPlan).map(([k, v]) => `${esc(k)}: ${v}`).join('\n');
-    const fs = g.findings.map(f => `<div class="eg-f"><span class="pbadge ${PB(f.p)}">${f.p}%</span> <b>${esc(f.t)}</b><span class="muted"> · ${esc(f.d)}</span></div>`).join('') || '<span class="badge ok">Egyezik</span>';
+    const key = f => 'e:' + g.codes.join(',') + '|' + f.t;
+    const fs = g.findings.map(f => `<div class="eg-f${App.rvCls ? App.rvCls(key(f)) : ''}"><div><span class="pbadge ${PB(f.p)}">${f.p}%</span> <b>${esc(f.t)}</b><span class="muted"> · ${esc(f.d)}</span></div>${App.rvBtns ? App.rvBtns(key(f)) : ''}</div>`).join('') || '<span class="badge ok">Egyezik</span>';
     const btns = [
       g.hits.length ? `<button class="btn btn-sm" data-eg-plan="${idx}">Rajzon</button>` : '',
       g.konsz.length ? `<button class="btn btn-sm" data-eg-konsz="${idx}">Konszignáció</button>` : '',
@@ -609,8 +615,6 @@
     if (!st.result) return;
     const w = buildWb();
     w.SheetNames.forEach((n, i) => XLSX.utils.book_append_sheet(wb, w.Sheets[n], i === 0 ? 'Egyezés - eltérések' : 'Egyezés - összes jel'));
-    const q = questions();
-    if (q.length) { const ws = XLSX.utils.aoa_to_sheet([['#', 'Kérdés a generálkivitelezőnek', 'Miért kell', 'Jelek'], ...q.map((x, n) => [n + 1, x.kerdes, x.miert, x.codes.join(', ')])]); ws['!cols'] = [{ wch: 4 }, { wch: 100 }, { wch: 50 }, { wch: 30 }]; XLSX.utils.book_append_sheet(wb, ws, 'Kérdések GK'); }
   }
 
   // A táblázat egy sorához tartozó konszignációs lap(ok) szövege: a modell ebből látja a méretet és az anyagot.

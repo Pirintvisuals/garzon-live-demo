@@ -40,7 +40,8 @@
     if (t) t.ellenorzes.forEach(f => checks.push([H.FIND_TYPES[f.tipus] || '', H.SEV[f.sulyossag].label, f.cim, f.leiras, f.idezet, f.erintett_tetelek.join(', ')]));
     all.forEach(it => H.notesOf(it).forEach(n => checks.push([H.NOTE_TYPES[n.tipus] || '', '', it.name, n.szoveg, n.idezet, it.id])));
     XLSX.utils.book_append_sheet(wb, sheet(checks, [32, 11, 40, 70, 60, 20]), 'Ellenőrizendő');
-    if (t) XLSX.utils.book_append_sheet(wb, sheet([['#', 'Kérdés', 'Miért kell', 'Érintett tételek'], ...t.kerdesek.map((q, n) => [n + 1, q.kerdes.replace(/^\s*Tisztelt\s+[^!,.]{0,40}[!,.]\s*/i, ''), q.miert, q.erintett_tetelek.join(', ')])], [4, 90, 60, 20]), 'Kérdések');
+    // Kérdések: a jóváhagyott hibákból megírt levél kérdései (ha már elkészült).
+    if (st.letter && st.letter.qs.length) XLSX.utils.book_append_sheet(wb, sheet([['#', 'Kérdés'], ...st.letter.qs.map((q, n) => [n + 1, q])], [4, 120]), 'Kérdések');
     if (st.rev && st.rev.changes.length) {
       const KIND = { changed: 'Módosult', added: 'Új tétel', removed: 'Törölt tétel' };
       const rows = st.rev.changes.map(c => {
