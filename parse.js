@@ -15,8 +15,9 @@
   }
   // Mennyiség oszlop: „Mennyiség”, vagy maga az egység a fejléc („db”, „darab”, „menny.”).
   // Megnevezés oszlop: „Megnevezés”, vagy generálkivitelezői táblázatban „Tétel szövege”.
-  const isNameHeader = c => /megnevez|tétel ?szöveg|termék ?specifik/.test(c);
-  const isQtyHeader = c => (/mennyis/.test(c) && !/egys/.test(c)) || /^(db|darab|menny\.?|db\.)$/.test(c);
+  // Magyar, német és román fejlécek.
+  const isNameHeader = c => /megnevez|tétel ?szöveg|termék ?specifik|bezeichnung|produktspezifikation|leistungsbeschreibung|denumire|specificați/.test(c);
+  const isQtyHeader = c => (/mennyis/.test(c) && !/egys/.test(c)) || /^(db|darab|menny\.?|db\.|menge|anzahl|cantitate)$/.test(c);
 
   function mapColumns(header) {
     const h = header.map(low);
@@ -26,11 +27,11 @@
     // A műszaki tartalomhoz tartozó további oszlopok (szín, helyszín, anyag stb.), az ár- és nyilatkozatoszlopok nélkül.
     const extra = h.map((c, i) => (i !== spec && /^(szín|helyszín|anyag|felület|méret|megjegyzés|rajz|alaprajzi jel)/.test(c) && !/ár|egységár|összesen|díj/.test(c)) ? i : -1).filter(i => i >= 0);
     return {
-      no: first(c => /^(s(or)?sz|sorsz|ssz|tétel ?sz)/.test(c)),
+      no: first(c => /^(s(or)?sz|sorsz|ssz|tétel ?sz|pos\.?$|nr\.? ?crt)/.test(c)),
       name: first(isNameHeader),
       spec, extra,
       qty: first(isQtyHeader),
-      unit: first(c => (/egys/.test(c) && /(mennyis|mérték)/.test(c)) || /^egység.?$/.test(c))
+      unit: first(c => (/egys/.test(c) && /(mennyis|mérték)/.test(c)) || /^(egység|einheit|u\.?m|unitate)\.?$/.test(c))
     };
   }
 
@@ -62,7 +63,7 @@
         : specCols.map(c => { const v = clean(row[c]); return v ? (header[c] ? header[c] + ': ' : '') + v : ''; }).filter(Boolean).join('; ');
       // Ha a megnevezés cellája a teljes leírást tartalmazza ("szék Mérete: ... Anyaga: ..."), a rövid név az első címke előtti rész.
       let nm = name, sp = spec;
-      const cut = name.length > 70 ? name.search(/\s(Méret[e]?|Anyag[a]?|Mennyiség|Szín[e]?|Kialakítás)\s*:/i) : -1;
+      const cut = name.length > 70 ? name.search(/\s(Méret[e]?|Anyag[a]?|Mennyiség|Szín[e]?|Kialakítás|Abmessungen|Material|Menge|Farbe|Dimensiuni|Cantitate|Culoare)\s*:/i) : -1;
       if (cut > 3) { nm = name.slice(0, cut).trim(); sp = name.slice(cut).trim() + (spec ? '; ' + spec : ''); }
       items.push({
         id: partNo + '/' + (no || items.length + 1),

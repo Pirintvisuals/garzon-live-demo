@@ -26,7 +26,7 @@ Mintaértékek:
 - Számolási állítás: számolja újra; ha a számolás helyes és nincs ellentmondás, 0-10.
 indok: egy rövid mondat, miért ennyi.
 kerdes: ha a valoszinuseg legalább 50, egy kérdés az ajánlatkérőnek (kiegészítő tájékoztatás-kérés), udvarias, hivatalos magyar megfogalmazásban, önállóan érthetően, a TÉTELEK sorban megadott rész- és tételszámra és megnevezésre hivatkozva. Megszólítás és elköszönés nélkül. Konkrétan kérdezzen rá a tisztázandó pontra, és ha van kézenfekvő helyes értelmezés, kérje annak megerősítését (például: „Kérjük megerősíteni, hogy a mélység helyesen 600 mm.”). Ha a valoszinuseg 50 alatti, a kerdes üres szöveg.
-A válasz nyelve magyar. Minden kapott felvetéshez pontosan egy elemet adjon vissza, ugyanazzal az id-val.`;
+A válasz nyelve magyar (a kérdés is), akkor is, ha a dokumentum más nyelvű. Minden kapott felvetéshez pontosan egy elemet adjon vissza, ugyanazzal az id-val.`;
 
 const SCHEMA = {
   type: 'OBJECT',

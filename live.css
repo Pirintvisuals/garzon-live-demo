@@ -330,3 +330,7 @@ tr.rv-ok td:first-child, .eg-f.rv-ok > div:first-child { box-shadow: inset 3px 0
 .ws-act { margin-left: auto; display: inline-flex; gap: 6px; }
 .eg-f { display: block; margin-bottom: 8px; }
 .eg-f .rv { display: flex; margin: 4px 0 0; }
+.lang-l { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); margin-right: 6px; }
+.lang-l select { font: inherit; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface); color: var(--text, inherit); }
+.callout.saved-c { background: var(--accent-soft); border: 1px solid var(--accent); padding: 12px 14px; border-radius: var(--radius); margin: 12px 0; }
+.callout.saved-c .actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }

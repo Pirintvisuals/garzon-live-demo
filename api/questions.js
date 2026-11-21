@@ -15,7 +15,7 @@ Szabályok:
 - Udvarias, hivatalos magyar megfogalmazás ("Kérjük megerősíteni…", "Kérjük megadni…"). Megszólítás, aláírás és köszönés nélkül: csak a kérdések.
 - Sorrend: elöl azok, amelyek az árat leginkább érintik (mennyiség, méret, hiányzó tétel), a végén a pontosítások.
 - forras: azoknak a problémáknak az azonosítói, amelyekből a kérdés készült.
-A válasz nyelve magyar.`;
+A válasz nyelve magyar, hacsak a felhasználói üzenet más nyelvet nem kér (németül vagy románul): akkor a kérdések azon a nyelven készülnek.`;
 
 const SCHEMA = {
   type: 'OBJECT',
@@ -40,7 +40,9 @@ module.exports = async (req, res) => {
     const cimzett = b.cimzett === 'gk'
       ? 'A címzett a generálkivitelező: a kérdések az árazás előtti tisztázást szolgálják (a rajz, a konszignáció és a tételjegyzék eltérései, hiányzó adatok).'
       : 'A címzett az ajánlatkérő: a kérdések kiegészítő tájékoztatás-kérésként mennek ki egy közbeszerzési eljárásban.';
-    const user = `${cimzett}\nPROJEKT: ${cut(b.projekt, 200)}\n\nJÓVÁHAGYOTT PROBLÉMÁK:\n\n` +
+    const NYELV = { de: 'németül (Deutsch), hivatalos üzleti német megfogalmazásban', ro: 'románul (română), hivatalos üzleti román megfogalmazásban' }[b.nyelv];
+    const nyelv = NYELV ? `\nA KÉRDÉSEKET ${NYELV.toUpperCase()} ÍRJA (a fenti szabályok ugyanúgy érvényesek; a tételszámok, jelek és idézett méretek változatlanok).` : '';
+    const user = `${cimzett}${nyelv}\nPROJEKT: ${cut(b.projekt, 200)}\n\nJÓVÁHAGYOTT PROBLÉMÁK:\n\n` +
       list.map(p => `[${cut(p.id, 40)}] (${cut(p.forras, 30)})\nTÉTEL: ${cut(p.tetel, 300) || 'általános'}\nPROBLÉMA: ${cut(p.cim, 200)}${p.leiras ? ' – ' + cut(p.leiras, 700) : ''}${p.idezet ? '\nIDÉZET: ' + cut(p.idezet, 300) : ''}`).join('\n\n');
     const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, thinking: 'low', maxOutputTokens: 12000, tier: 'strong' });
     res.status(200).json({ kerdesek: (out.data.kerdesek || []).filter(q => q && q.kerdes && q.kerdes.trim()), model: out.model });

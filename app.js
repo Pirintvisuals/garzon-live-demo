@@ -91,7 +91,7 @@
   }
   const fresh = () => ({
     sample: '', rev: null, prices: {}, pricing: { margin: 12, risk: 0, open: {} }, todo: {}, replay: null, replayed: false, chatCache: {}, chat: { open: false, msgs: [], draft: '' },
-    review: {}, manual: [], letter: null, writing: false, letterError: '',
+    review: {}, manual: [], letter: null, letters: {}, lang: 'hu', writing: false, letterError: '', savedOffer: null,
     tab: 'feltoltes', files: { sheet: null, doc: null }, book: null, doc: null, docIndex: null,
     ai: {}, tender: null, partStatus: {}, tenderStatus: 'idle', tenderError: '',
     docs: [], reading: '', running: false, startedAt: 0, elapsedMs: 0, model: '', filter: { maker: '', part: '', onlyNotes: false }, fromSaved: false
@@ -245,6 +245,11 @@
       ${st.book ? '<button class="btn btn-sm" data-tab="revizio">Módosított tételjegyzék érkezett?</button>' : ''}
       <button class="btn" id="btn-saved" hidden>Korábban feldolgozott eredmény megnyitása</button>
     </div></div>`;
+    if (st.savedOffer && !done() && !st.running) {
+      const d = new Date(st.savedOffer.savedAt);
+      h += `<div class="callout saved-c"><b>Ezt az ajánlatkérést már feldolgozta</b> (${d.toLocaleDateString('hu-HU')} ${d.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })}). Az eredmény ezen a gépen el van mentve, a jóváhagyásokkal és a levéllel együtt.
+        <div class="actions"><button class="btn btn-primary" id="btn-open-saved">Megnyitás (ingyenes)</button><button class="btn" id="btn-run-again">Feldolgozás újra</button></div></div>`;
+    }
     if (st.book && (st.running || c.read || st.tenderStatus !== 'idle')) {
       h += `<div class="card"><div class="card-h"><h3>Feldolgozás állapota</h3><span class="muted">${c.read} / ${c.items} tétel értelmezve</span></div><div class="card-b">
         <div class="bar big"><i style="width:${c.items ? Math.round(100 * c.read / c.items) : 0}%"></i></div>
@@ -714,12 +719,34 @@
     return out;
   }
   const problemsSig = list => list.map(p => p.id + '|' + p.leiras).join('§');
-  function letterText(qs) {
-    const pn = projectTitle();
-    const head = gkMode()
-      ? `Tisztelt Címzett!\n\n${pn ? `A(z) „${pn}” projekt` : 'A projekt'} bútor- és asztalos tételeinek árazása előtt az alábbiakat kérjük tisztázni:`
-      : `Tisztelt Ajánlatkérő!\n\n${pn ? `A(z) „${pn}” tárgyú eljárásban` : 'Az eljárásban'} az alábbi kiegészítő tájékoztatást kérjük:`;
-    return `${head}\n\n${qs.map((q, n) => `${n + 1}. ${q}`).join('\n\n')}\n\nVálaszukat előre is köszönjük.\n\nTisztelettel:\nGarzon`;
+  // A levél nyelve: magyar, német vagy román (a kérdéseket a modell ezen a nyelven írja).
+  const LANGS = { hu: 'Magyar', de: 'Deutsch', ro: 'Română' };
+  function letterText(qs, lang) {
+    const gk = gkMode();
+    // Közbeszerzésnél a tárgy a magyar összefoglalóból jön: idegen nyelvű levélbe nem tesszük bele.
+    const pn = (lang && lang !== 'hu' && !gk) ? '' : projectTitle();
+    const T = {
+      hu: {
+        head: gk ? `Tisztelt Címzett!\n\n${pn ? `A(z) „${pn}” projekt` : 'A projekt'} bútor- és asztalos tételeinek árazása előtt az alábbiakat kérjük tisztázni:`
+          : `Tisztelt Ajánlatkérő!\n\n${pn ? `A(z) „${pn}” tárgyú eljárásban` : 'Az eljárásban'} az alábbi kiegészítő tájékoztatást kérjük:`,
+        end: 'Válaszukat előre is köszönjük.\n\nTisztelettel:\nGarzon'
+      },
+      de: {
+        head: gk ? `Sehr geehrte Damen und Herren,\n\nvor der Kalkulation der Möbel- und Tischlerpositionen ${pn ? `des Projekts „${pn}“` : 'des Projekts'} bitten wir um Klärung der folgenden Punkte:`
+          : `Sehr geehrte Damen und Herren,
+
+im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`,
+        end: 'Für Ihre Antwort bedanken wir uns im Voraus.\n\nMit freundlichen Grüßen\nGarzon'
+      },
+      ro: {
+        head: gk ? `Stimate doamne și domni,\n\nînainte de ofertarea pozițiilor de mobilier și tâmplărie ${pn ? `ale proiectului „${pn}”` : 'ale proiectului'}, vă rugăm să clarificați următoarele:`
+          : `Stimate doamne și domni,
+
+în cadrul prezentei proceduri vă rugăm să ne furnizați următoarele clarificări:`,
+        end: 'Vă mulțumim anticipat pentru răspuns.\n\nCu stimă,\nGarzon'
+      }
+    }[lang || 'hu'];
+    return `${T.head}\n\n${qs.map((q, n) => `${n + 1}. ${q}`).join('\n\n')}\n\n${T.end}`;
   }
   const questionsText = () => (st.letter ? st.letter.text : '');
   async function writeQuestions() {
@@ -728,15 +755,16 @@
     st.writing = true; st.letterError = ''; render();
     let qs;
     try {
-      const out = await api('questions', { cimzett: gkMode() ? 'gk' : 'ajanlatkero', projekt: projectTitle(), problems: probs });
+      const out = await api('questions', { cimzett: gkMode() ? 'gk' : 'ajanlatkero', projekt: projectTitle(), problems: probs, nyelv: st.lang });
       qs = out.kerdesek.map(q => cleanQ(q.kerdes));
     } catch (e) {
       // Ha a szolgáltatás nem érhető el, egyszerű vázlat a jóváhagyott problémákból (szerkeszthető).
       qs = probs.map(p => `${p.tetel ? p.tetel + ': ' : ''}${p.leiras || p.cim} Kérjük pontosítani.`);
       st.letterError = 'A kérdések megírása most nem sikerült (' + e.message + '). Egyszerű vázlat készült a jóváhagyott problémákból.';
     }
-    st.letter = { qs, sig: problemsSig(probs), text: letterText(qs) };
-    st.writing = false; render();
+    st.letter = { qs, sig: problemsSig(probs), text: letterText(qs, st.lang), lang: st.lang };
+    st.letters[st.lang] = st.letter;
+    st.writing = false; render(); saveJobSoon();
   }
   function viewQuestions() {
     const el = $('#view-kerdesek');
@@ -746,14 +774,15 @@
     const who = gkMode() ? 'a generálkivitelezőnek' : 'az ajánlatkérőnek';
     let h = `<div class="view-head"><div><h2>Kérdések ${who}</h2><p>A kérdések a jóváhagyott hibákból és a saját észrevételekből készülnek. Küldés előtt szerkeszthető.</p></div></div>`;
     h += `<div class="card"><div class="card-b q-sum"><div><b>${probs.length}</b> jóváhagyott probléma${own ? ` (ebből ${own} saját észrevétel)` : ''} · <span class="muted">${open} felvetés még nincs átnézve</span></div>
-      <div class="actions">${probs.length ? `<button class="btn btn-primary" id="btn-write-q" ${st.writing ? 'disabled' : ''}>${st.writing ? '<span class="spin"></span> Kérdések írása…' : (st.letter ? 'Kérdések újraírása' : 'Kérdések megírása')}</button>` : ''}
+      <div class="actions"><label class="lang-l">A levél nyelve <select id="q-lang" ${st.writing ? 'disabled' : ''}>${Object.entries(LANGS).map(([k, v]) => `<option value="${k}" ${st.lang === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+      ${probs.length ? `<button class="btn btn-primary" id="btn-write-q" ${st.writing ? 'disabled' : ''}>${st.writing ? '<span class="spin"></span> Kérdések írása…' : (st.letter ? 'Kérdések újraírása' : 'Kérdések megírása')}</button>` : ''}
       <button class="btn" data-tab="ellenorzes">Hibák átnézése</button>${gkMode() && Egyezes.ready() ? '<button class="btn" data-tab="egyezes">Egyezés átnézése</button>' : ''}</div></div></div>`;
     if (st.letter && st.letter.sig !== problemsSig(probs)) h += `<div class="callout warn-c">A jóváhagyások megváltoztak a levél megírása óta. A „Kérdések újraírása” gombbal frissíthető.</div>`;
     if (st.letterError) h += `<div class="callout warn-c">${esc(st.letterError)}</div>`;
     if (!probs.length) h += `<div class="card"><div class="card-b empty">Még nincs jóváhagyott probléma. A <b>Hibák a kiírásban</b>${gkMode() ? ' és az <b>Egyezés</b>' : ''} oldalon a „Jóváhagyom” gombbal jelölje meg, ami valóban tisztázandó, vagy vegyen fel saját észrevételt. A kérdések ezekből készülnek.</div></div>`;
     if (st.letter) {
       h += `<div class="grid g-main"><div class="card"><div class="card-h"><h3>Kérdések (${st.letter.qs.length})</h3></div><div class="card-b qs">${st.letter.qs.map((q, n) => `<div class="q"><span class="q-n">${n + 1}.</span><div><p class="q-k">${esc(q)}</p></div></div>`).join('')}</div></div>
-        <div class="card"><div class="card-h"><h3>Levél</h3><button class="btn btn-primary btn-sm" id="btn-copy-letter">Szöveg másolása</button></div><div class="card-b"><textarea class="letter-ta" id="letter-text" rows="22">${esc(st.letter.text)}</textarea></div></div></div>`;
+        <div class="card"><div class="card-h"><h3>Levél · ${LANGS[st.letter.lang || 'hu']}</h3><span><button class="btn btn-sm" id="btn-mail">E-mail megnyitása</button> <button class="btn btn-primary btn-sm" id="btn-copy-letter">Szöveg másolása</button></span></div><div class="card-b"><textarea class="letter-ta" id="letter-text" rows="22">${esc(st.letter.text)}</textarea></div></div></div>`;
     }
     el.innerHTML = h;
   }
@@ -1093,7 +1122,7 @@
     clearInterval(tick);
     st.running = false; st.elapsedMs = Date.now() - st.startedAt;
     if (done() && st.tender) st.tab = 'osszefoglalo';
-    render();
+    st.savedOffer = null; render(); saveJobSoon();
   }
   async function retry(which) {
     if (st.running) return;
@@ -1110,6 +1139,7 @@
         Egyezes.trySheet(file);
         try { st.book = await Parse.readWorkbook(await file.arrayBuffer(), file.name, sheets => api('columns', { sheets })); } finally { st.detecting = false; }
         st.ai = {}; st.tender = null; st.rev = null; st.partStatus = {}; st.tenderStatus = 'idle'; st.elapsedMs = 0;
+        if (st.book.items.length) checkSaved();
         if (!st.book.items.length) { alert('Ebben a táblázatban nem találtam tételjegyzéket.' + (st.book.aiError ? ' (' + st.book.aiError + ')' : '')); st.book = null; st.files.sheet = null; }
       } else {
         const list = Array.isArray(file) ? file : [file];
@@ -1185,6 +1215,36 @@
     try { const s = await (await fetch('data/mentett.json')).json(); if (s && s.sample === key) { st.replay = s; st.chatCache = s.chatCache || {}; } } catch (e) { /* nincs mentett eredmény: élő feldolgozás */ }
     render();
   }
+  // Feldolgozott munkák mentése ezen a gépen (böngésző tárhely): ugyanannak a tételjegyzéknek az újbóli feltöltésekor
+  // az eredmény ingyen visszatölthető, nem kell újra futtatni. Legfeljebb 8 munka; a legrégebbi törlődik.
+  const JOBS = 'garzon-munkak';
+  const fingerprint = () => st.book ? [mode, st.book.fileName, st.book.items.length, st.book.items.reduce((a, i) => a + (i.qty || 0), 0)].join('|') : '';
+  const readJobs = () => { try { return JSON.parse(localStorage.getItem(JOBS) || '{}'); } catch (e) { return {}; } };
+  function saveJob() {
+    if (!done() || !st.tender || st.running) return;
+    const jobs = readJobs(), fp = fingerprint();
+    jobs[fp] = { savedAt: new Date().toISOString(), title: projectTitle(), snap: { ...snapshot(), review: st.review, manual: st.manual, letters: st.letters, lang: st.lang } };
+    const keys = Object.keys(jobs).sort((a, b) => (jobs[b].savedAt > jobs[a].savedAt ? 1 : -1));
+    keys.slice(8).forEach(k => delete jobs[k]);
+    for (let n = 0; n < 8; n++) {
+      try { localStorage.setItem(JOBS, JSON.stringify(jobs)); return; } catch (e) { const ks = Object.keys(jobs).sort((a, b) => (jobs[a].savedAt > jobs[b].savedAt ? 1 : -1)); if (ks.length <= 1) return; delete jobs[ks[0]]; }
+    }
+  }
+  let saveTimer = null;
+  function saveJobSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(saveJob, 800); }
+  function checkSaved() {
+    if (!st.book || done()) return;
+    const j = readJobs()[fingerprint()];
+    st.savedOffer = j ? { savedAt: j.savedAt } : null;
+  }
+  function openSaved() {
+    const j = readJobs()[fingerprint()]; if (!j) return;
+    const s = j.snap;
+    restore(s); st.replay = null; st.replayed = false;
+    Object.assign(st, { review: s.review || {}, manual: s.manual || [], letters: s.letters || {}, lang: s.lang || 'hu' });
+    st.letter = st.letters[st.lang] || null;
+    render();
+  }
   function snapshot() { return { v: 1, savedAt: new Date().toISOString(), sample: st.sample, book: st.book, doc: st.doc, docs: st.docs, ai: st.ai, tender: st.tender, rev: st.rev, prices: {}, todo: {}, chatCache: st.chatCache, elapsedMs: st.elapsedMs, model: st.model }; }
   function restore(s) {
     st = fresh(); Object.assign(st, { sample: s.sample || '', rev: s.rev || null, prices: s.prices || {}, todo: s.todo || {}, replay: s.sample ? s : null, replayed: true, chatCache: s.chatCache || {}, book: s.book, doc: s.doc, ai: s.ai, tender: s.tender, elapsedMs: s.elapsedMs, model: s.model, fromSaved: true });
@@ -1226,10 +1286,13 @@
     else if (t.id === 'btn-saved-run') fetch(savedFile()).then(r => r.json()).then(s => { restore(s); st.replay = null; render(); }).catch(() => alert('A korábbi feldolgozás nem tölthető be.'));
     else if (t.dataset.mode) { mode = t.dataset.mode; if (st.tab === 'egyezes' && mode !== 'gk') st.tab = 'feltoltes'; render(); }
     else if (t.dataset.retry) retry(t.dataset.retry);
-    else if (t.dataset.rv) { const y = window.scrollY, k = t.dataset.rv; st.review[k] = st.review[k] === t.dataset.v ? '' : t.dataset.v; render(); window.scrollTo(0, y); }
+    else if (t.dataset.rv) { const y = window.scrollY, k = t.dataset.rv; st.review[k] = st.review[k] === t.dataset.v ? '' : t.dataset.v; render(); window.scrollTo(0, y); saveJobSoon(); }
     else if (t.id === 'man-add') { const txt = ($('#man-text') || {}).value || ''; if (txt.trim()) { st.manual.push({ id: Date.now().toString(36), item: ($('#man-item') || {}).value || '', text: txt.trim() }); const y = window.scrollY; render(); window.scrollTo(0, y); } }
     else if (t.dataset.manDel) { st.manual = st.manual.filter(m => m.id !== t.dataset.manDel); const y = window.scrollY; render(); window.scrollTo(0, y); }
     else if (t.id === 'btn-write-q') writeQuestions();
+    else if (t.id === 'btn-open-saved') openSaved();
+    else if (t.id === 'btn-run-again') { st.savedOffer = null; run(); }
+    else if (t.id === 'btn-mail') { const txt = ($('#letter-text') || {}).value || questionsText(); const subj = (gkMode() ? 'Kérdések: ' : 'Kiegészítő tájékoztatás-kérés: ') + projectTitle(); location.href = 'mailto:?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(txt); }
     else if (t.dataset.ws) downloadWorkshop(t.dataset.ws);
     else if (t.id === 'btn-copy-letter') copy(($('#letter-text') || {}).value || questionsText(), t);
     else if (t.id === 'btn-rfq') copy(rfqText(), t);
@@ -1238,6 +1301,7 @@
     const t = e.target;
     if (t.type === 'file' && t.files[0]) { const k = t.closest('.drop').dataset.kind; if (k === 'all') loadAll([...t.files]); else if (k === 'egyezes') Egyezes.addFiles([...t.files]); else if (k === 'rev') setRevision(t.files[0]); else { if (k === 'sheet') st.sample = ''; setFile(k, k === 'doc' ? [...t.files] : t.files[0]); } }
     else if (t.dataset.maker) { st.ai[t.dataset.maker].gyarto = t.value; st.ai[t.dataset.maker].gyarto_indok = 'Kézzel átállítva.'; render(); }
+    else if (t.id === 'q-lang') { st.lang = t.value; st.letter = st.letters[st.lang] || null; render(); saveJobSoon(); }
     else if (t.id === 'f-part') { st.filter.part = t.value; render(); }
     else if (t.id === 'f-maker') { st.filter.maker = t.value; render(); }
     else if (t.id === 'f-notes') { st.filter.onlyNotes = t.checked; render(); }
@@ -1255,7 +1319,7 @@
       else { if (d.dataset.kind === 'sheet') st.sample = ''; setFile(d.dataset.kind, d.dataset.kind === 'doc' ? [...e.dataTransfer.files] : e.dataTransfer.files[0]); }
     }
   }));
-  document.addEventListener('input', e => { if (e.target.id === 'letter-text' && st.letter) st.letter.text = e.target.value; });
+  document.addEventListener('input', e => { if (e.target.id === 'letter-text' && st.letter) { st.letter.text = e.target.value; saveJobSoon(); } });
   document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'chat-in') { e.preventDefault(); askChat(e.target.value); } });
   // Ctrl+Shift+S: a feldolgozott eredmény mentése JSON-ba (ebből lesz a data/mentett.json tartalék).
   document.addEventListener('keydown', e => {

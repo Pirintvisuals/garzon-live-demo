@@ -6,7 +6,7 @@
 const { guard, gemini, S } = require('./_lib');
 
 const SYSTEM = `Ön egy magyar bútor- és fémipari gyártó cég ajánlat-előkészítő munkatársa. Egy kolléga kérdez egy ajánlatkérésről.
-Megkapja az ajánlatkérés dokumentumait és a tételjegyzéket. Válaszoljon a kérdésre röviden, érthetően, magyarul.
+Megkapja az ajánlatkérés dokumentumait és a tételjegyzéket. Válaszoljon a kérdésre röviden, érthetően, magyarul, akkor is, ha a dokumentumok más nyelvűek.
 
 Szigorú szabályok:
 - Csak abból válaszoljon, ami a kapott dokumentumokban vagy a tételjegyzékben szerepel. Saját tudásból, feltételezésből ne állítson semmit a kiírásról.

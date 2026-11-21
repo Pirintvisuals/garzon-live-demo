@@ -52,7 +52,7 @@ Szabályok:
 - NEM észrevétel: a lapanyag vastagságának hiánya, ha a kiírás terméket kér és nem gyártmánytervet; a mennyiségi egység hiánya, ha a darabszám egyértelmű.
 - NEM észrevétel: iskolabútornál a korcsoport megadása a méretet helyettesíti (ne jelezze hiányként a szék vagy asztal méretét, ha korcsoport szerepel); az állítható méret (tartomány) nem pontatlanság; kereskedelmi terméknél (beszállítói) a részletes szerkezeti adat hiánya nem gond. A méret megjegyzésbe ne ismételje meg az észrevételt.
 - Ha a tétel leírása rendben van, az eszrevetelek üres tömb.
-- A válasz nyelve magyar. Minden kapott tételhez pontosan egy elemet adjon vissza, ugyanazzal az id-val.`;
+- A válasz nyelve magyar. A dokumentumok és a tételek lehetnek más nyelven is (például németül vagy románul): ilyenkor is magyarul válaszoljon: a kategória, az anyag, a váz és a szín mezőt is MAGYARUL töltse ki (fordítsa le, például „Melamin-Dekorspanplatte” = „melamin dekor bútorlap”, „weiß” = „fehér”); az idézet (idezet) viszont szó szerint az eredeti nyelven maradjon. Minden kapott tételhez pontosan egy elemet adjon vissza, ugyanazzal az id-val.`;
 
 const SCHEMA = {
   type: 'OBJECT',
