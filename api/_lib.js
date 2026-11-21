@@ -7,9 +7,16 @@ const API = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 function guard(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'Csak POST kérés.' }); return false; }
-  // Jelszó nincs. Csak a saját oldalról érkező kérést szolgáljuk ki; a költség felső korlátja a Google AI Studio keret.
+  // Csak a saját oldalról érkező kérést szolgáljuk ki.
   const from = String(req.headers.origin || req.headers.referer || ''), host = String(req.headers.host || '');
   if (from && host && !from.includes(host)) { res.status(403).json({ error: 'Csak az alkalmazás saját oldaláról használható.' }); return false; }
+  // Jelszó: ha a DEMO_PASSWORD be van állítva, minden MI-hívás csak a helyes jelszóval megy (a böngésző egyszer kéri, utána megjegyzi).
+  // Így a nyilvános linken senki nem költheti el az API-keretet. Helyben (DEMO_PASSWORD nélkül) nem kér jelszót.
+  const pw = process.env.DEMO_PASSWORD;
+  if (pw) {
+    const got = Buffer.from(String(req.headers['x-demo-key'] || '')), want = Buffer.from(String(pw));
+    if (got.length !== want.length || !require('crypto').timingSafeEqual(got, want)) { res.status(401).json({ error: 'Hibás vagy hiányzó jelszó.' }); return false; }
+  }
   if (!process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY) { res.status(500).json({ error: 'Élő feldolgozáshoz API-kulcs kell (ANTHROPIC_API_KEY). A beépített minta kulcs nélkül is működik.' }); return false; }
   return true;
 }
