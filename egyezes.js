@@ -586,10 +586,17 @@
     for (const k of st.konsz) for (const it of k.items) if (it.project) return it.project.replace(/\s+/g, ' ');
     return '';
   }
-  function letter() {
-    const q = questions(), pn = projectName();
+  // extra: további kérdések (a tételek szövegéből, a modell értelmezése); a sorszámozás folytatódik.
+  function letter(extra) {
+    const q = questions().map(x => ({ kerdes: x.kerdes })).concat((extra || []).map(k => ({ kerdes: k }))), pn = projectName();
     return `Tisztelt Címzett!\n\n${pn ? `A(z) „${pn}” projekt` : 'A projekt'} bútor- és asztalos tételeinek árazása előtt az alábbiakat kérjük tisztázni:\n\n` +
       q.map((x, n) => `${n + 1}. ${x.kerdes}`).join('\n\n') + `\n\nVálaszukat előre is köszönjük.\n\nÜdvözlettel:\nGarzon`;
+  }
+  // A táblázat egy sorának jelei (a modell kérdéseinek összevetéséhez az egyezés kérdéseivel).
+  function codesForRow(row) {
+    if (!st.result) return [];
+    const g = st.result.groups.find(x => x.rows.some(r => r.row === row));
+    return g ? g.codes : [];
   }
   // Árazáshoz: a táblázat egy sorához tartozó eltérések (sorszám szerint), és a tételjegyzékből hiányzó jelek.
   function flagsForRow(row) {
@@ -613,5 +620,5 @@
     if (!g || !g.konsz.length) return '';
     return g.konsz.map(k => `[${g.codes.join(', ')} konszignáció, ${k.page}. oldal] ${k.text.split(NL).map(l => l.trim()).filter(Boolean).join(' · ')}`).join(' | ').slice(0, 1500);
   }
-  root.Egyezes = { get state() { return st; }, addFiles: take, trySheet, ready, reset, view, dropHtml, readSheet, compare, expandCodes, dimsOf, questions, letter, flagsForRow, missingGroups, appendSheets, projectName, konszTextForRow };
+  root.Egyezes = { get state() { return st; }, addFiles: take, trySheet, ready, reset, view, dropHtml, readSheet, compare, expandCodes, dimsOf, questions, letter, flagsForRow, missingGroups, appendSheets, projectName, konszTextForRow, codesForRow };
 })(window);

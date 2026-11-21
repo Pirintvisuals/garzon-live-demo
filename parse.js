@@ -60,10 +60,14 @@
       const no = col.no >= 0 ? clean(row[col.no]).replace(/\.$/, '') : '';
       const spec = specCols.length === 1 ? clean(row[specCols[0]])
         : specCols.map(c => { const v = clean(row[c]); return v ? (header[c] ? header[c] + ': ' : '') + v : ''; }).filter(Boolean).join('; ');
+      // Ha a megnevezés cellája a teljes leírást tartalmazza ("szék Mérete: ... Anyaga: ..."), a rövid név az első címke előtti rész.
+      let nm = name, sp = spec;
+      const cut = name.length > 70 ? name.search(/\s(Méret[e]?|Anyag[a]?|Mennyiség|Szín[e]?|Kialakítás)\s*:/i) : -1;
+      if (cut > 3) { nm = name.slice(0, cut).trim(); sp = name.slice(cut).trim() + (spec ? '; ' + spec : ''); }
       items.push({
         id: partNo + '/' + (no || items.length + 1),
         partNo, part: clean(sheetName), sheet: sheetName, row: r + 1, no: no || String(items.length + 1),
-        name, spec, qty, unit: col.unit >= 0 ? clean(row[col.unit]) : qtyUnit
+        name: nm, spec: sp, qty, unit: col.unit >= 0 ? clean(row[col.unit]) : qtyUnit
       });
     }
     // Azonos kód kétszer: a sorszámmal tesszük egyedivé.
