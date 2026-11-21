@@ -24,6 +24,7 @@
   const PREFIX_DEFAULT = ['MO', 'AS', 'AE', 'MOB', 'BEB'];
   const PREFIX_OK = /^[A-Z]{2,3}-?\d/;
   const NL = String.fromCharCode(10);
+  const ROOM = /^([0-9]{1,2}\.[0-9]{2,3})(?:\s|$)/;
   const base = c => c.replace(/[a-z]$/, '');
   const prefixOf = c => c.replace(/-?\d.*$/, '');
 
@@ -191,7 +192,7 @@
       if (items.length) return { kind: 'konsz', fileName: file.name, pages: pdf.numPages, items };
     }
     // Tervlap: minden jel a helyével.
-    const hits = [], pages = [];
+    const hits = [], pages = [], stamps = [];
     for (let p = 1; p <= pdf.numPages; p++) {
       onProgress && onProgress(p, pdf.numPages);
       const page = await pdf.getPage(p);
@@ -200,6 +201,9 @@
       const tc = p === 1 ? first : await page.getTextContent();
       for (const i of tc.items) {
         if (!i.str) continue;
+        // Helyiségszám (például "0.040", "1.012"): ebből tudjuk, melyik helyiségben van egy jel.
+        const rm = i.str.trim().match(ROOM);
+        if (rm) { const [rx, ry] = vp.convertToViewportPoint(i.transform[4], i.transform[5]); stamps.push({ room: rm[1], page: p, x: rx, y: ry }); }
         CODE_G.lastIndex = 0;
         let m;
         while ((m = CODE_G.exec(i.str))) {
@@ -214,7 +218,22 @@
       }
     }
     const uniq = hits.filter((h, i) => !hits.slice(0, i).some(o => o.code === h.code && o.page === h.page && Math.abs(o.x - h.x) < 3 && Math.abs(o.y - h.y) < 3));
-    return { kind: 'plan', fileName: file.name, label: planLabel(file.name), pages, hits: uniq };
+    // A helyiséglista táblázata (egy oszlopban sok helyiségszám) nem a rajz része: kihagyjuk.
+    const col = {};
+    stamps.forEach(st2 => { const k = st2.page + ':' + Math.round(st2.x / 12); col[k] = (col[k] || 0) + 1; });
+    const planStamps = stamps.filter(st2 => (col[st2.page + ':' + Math.round(st2.x / 12)] || 0) < 12);
+    // Minden jelhez a legközelebbi helyiségszám (ha elég közel van), azonos lapon.
+    uniq.forEach(h => {
+      let best = null, bd = Infinity;
+      for (const st2 of planStamps) {
+        if (st2.page !== h.page) continue;
+        const d = (st2.x - h.x) ** 2 + (st2.y - h.y) ** 2;
+        if (d < bd) { bd = d; best = st2; }
+      }
+      const W = pages[h.page - 1].w;
+      h.room = best && Math.sqrt(bd) < W * 0.12 ? best.room : '';
+    });
+    return { kind: 'plan', fileName: file.name, label: planLabel(file.name), pages, hits: uniq, rooms: [...new Set(planStamps.map(x => x.room))] };
   }
   function planLabel(name) {
     const n = name.replace(/\.pdf$/i, '');
@@ -228,6 +247,9 @@
     const known = new Set([...(sheet ? sheet.rows.flatMap(r => r.codes) : []), ...konsz.flatMap(k => k.codes)].map(prefixOf));
     const allowed = known.size ? known : new Set(PREFIX_DEFAULT);
     const plans = st.plans.map(p => ({ ...p, hits: p.hits.filter(h => allowed.has(prefixOf(h.code))) }));
+    const roomFiles = {};
+    plans.forEach(p => (p.rooms || []).forEach(r => { (roomFiles[r] = roomFiles[r] || new Set()).add(p.fileName); }));
+    const sharedRooms = new Set(Object.keys(roomFiles).filter(r => roomFiles[r].size > 1));
     // Jelcsoportok: ami egy táblázatsorban vagy egy konszignációs lapon együtt szerepel, illetve a kisbetűs változatok (MO11 ~ MO11a, MO11b).
     const parent = {};
     const find = c => { while (parent[c] !== c) { parent[c] = parent[parent[c]]; c = parent[c]; } return c; };
@@ -256,9 +278,14 @@
       const codes = [...g.codes].sort((a, b) => a.localeCompare(b, 'hu', { numeric: true }));
       const tjQty = g.rows.length ? g.rows.reduce((s, r) => s + (r.qty || 0), 0) : null;
       const kQty = g.konsz.length && g.konsz.every(k => k.qty != null) ? g.konsz.reduce((s, k) => s + k.qty, 0) : null;
-      const pCount = g.hits.length;
-      const perPlan = {};
-      g.hits.forEach(h => { perPlan[h.label] = (perPlan[h.label] || 0) + 1; });
+      // Átfedő részletrajzok: ha egy helyiség több tervlapon is ki van rajzolva, abban a helyiségben
+      // a jelet csak egyszer számoljuk (amelyik lapon több van). A nyers darabszám is megmarad.
+      const perRoomFile = {};
+      g.hits.forEach(h => { if (!h.room || !sharedRooms.has(h.room)) return; const k = h.room; (perRoomFile[k] = perRoomFile[k] || {})[h.fileName] = (perRoomFile[k][h.fileName] || 0) + 1; });
+      const overlapExtra = Object.values(perRoomFile).reduce((sum, byFile) => { const v = Object.values(byFile); return sum + v.reduce((a, b) => a + b, 0) - Math.max(...v); }, 0);
+      const rawCount = g.hits.length, pCount = rawCount - overlapExtra;
+      const perPlan = {}, perRoom = {};
+      g.hits.forEach(h => { perPlan[h.label] = (perPlan[h.label] || 0) + 1; if (h.room) perRoom[h.room] = (perRoom[h.room] || 0) + 1; });
       const name = (g.konsz[0] && g.konsz[0].name) || (g.rows[0] && g.rows[0].text.replace(/\s+/g, ' ').slice(0, 70)) || '';
       const f = [];
       const inSheet = g.rows.length > 0, inKonsz = g.konsz.length > 0, onPlan = pCount > 0;
@@ -273,13 +300,14 @@
       if (tjQty != null && kQty != null && Math.abs(tjQty - kQty) > 1e-6) f.push({ t: 'Eltérő mennyiség', d: `Tételjegyzék: ${fmt(tjQty)} ${unit}, konszignáció: ${fmt(kQty)} ${unit}.`, p: 90 });
       if (onPlan && countable) {
         const ref = kQty != null ? kQty : tjQty, src = kQty != null ? 'konszignáció' : 'tételjegyzék';
-        if (ref != null && pCount !== ref) {
+        // Ha a rajzi darabszám valamelyik dokumentummal egyezik, a két dokumentum eltérését az "Eltérő mennyiség" már jelzi.
+        if (ref != null && pCount !== ref && pCount !== tjQty && pCount !== kQty) {
           const sheets = Object.keys(perPlan).length;
           // A rajzi jelek száma nem mindig darabszám: egy jel jelölhet egy egész sort (például öltözőszekrény-sor),
           // és két részletrajz átfedheti egymást. Ezért a valószínűség attól függ, melyik eset valószínű.
           if (pCount < ref * 0.5) f.push({ t: 'A rajzon kevesebb jel', d: `A tervlapokon ${pCount} helyen szerepel a jel, a ${src} ${fmt(ref)} ${unit}-ot ír. Valószínűleg egy jel több darabot jelöl (például egy szekrénysort); érdemes a rajzon ellenőrizni.`, p: 35 });
-          else if (pCount > ref && sheets > 1) f.push({ t: 'A rajzon más a darabszám', d: `A tervlapokon ${pCount} helyen szerepel a jel (${Object.entries(perPlan).map(([k, v]) => k + ': ' + v).join(', ')}), a ${src} ${fmt(ref)} ${unit}-ot ír. A jel több részletrajzon is szerepel; ha a részletek átfedik egymást, ugyanaz a darab kétszer számolódik.`, p: 45 });
-          else f.push({ t: 'A rajzon más a darabszám', d: `A tervlapokon ${pCount} helyen szerepel a jel, a ${src} ${fmt(ref)} ${unit}-ot ír.`, p: Math.abs(pCount - ref) >= 2 ? 65 : 55 });
+          else if (pCount > ref && sheets > 1 && !overlapExtra) f.push({ t: 'A rajzon más a darabszám', d: `A tervlapokon ${pCount} helyen szerepel a jel (${Object.entries(perPlan).map(([k, v]) => k + ': ' + v).join(', ')}), a ${src} ${fmt(ref)} ${unit}-ot ír. A jel több részletrajzon is szerepel; ha a részletek átfedik egymást, ugyanaz a darab kétszer számolódik.`, p: 45 });
+          else f.push({ t: 'A rajzon más a darabszám', d: `A tervlapokon ${pCount} helyen szerepel a jel${overlapExtra ? ` (az átfedő részletrajzokon kétszer szereplő ${overlapExtra} jelet egyszer számolva)` : ''}, a ${src} ${fmt(ref)} ${unit}-ot ír.`, p: Math.abs(pCount - ref) >= 2 ? 65 : 55 });
         }
       }
       // Méretek: konszignáció vs tételjegyzék (műszaki tartalom + tételszöveg)
@@ -311,7 +339,7 @@
       }
       g.rows.forEach(r => r.issues.forEach(i => f.push({ ...i, row: r.row })));
       f.sort((a, b) => b.p - a.p);
-      out.push({ codes, name, tjQty, kQty, pCount, perPlan, unit, rows: g.rows, konsz: g.konsz, hits: g.hits, findings: f, p: f.length ? f[0].p : 0 });
+      out.push({ codes, name, tjQty, kQty, pCount, rawCount, overlapExtra, perPlan, perRoom, unit, rows: g.rows, konsz: g.konsz, hits: g.hits, findings: f, p: f.length ? f[0].p : 0 });
     }
     out.sort((a, b) => (b.findings.length > 0) - (a.findings.length > 0) || a.codes[0].localeCompare(b.codes[0], 'hu', { numeric: true }));
     // Sorok jel nélkül (nem párosíthatók): külön lista.
@@ -419,7 +447,9 @@
     el.innerHTML = h;
   }
   function rowHtml(g, idx, planCols) {
-    const per = Object.entries(g.perPlan).map(([k, v]) => `${esc(k)}: ${v}`).join('\n');
+    const per = Object.entries(g.perPlan).map(([k, v]) => `${esc(k)}: ${v}`).join('\n') +
+      (Object.keys(g.perRoom).length ? '\n\nHelyiségenként: ' + Object.entries(g.perRoom).sort().map(([k, v]) => `${k}: ${v}`).join(', ') : '') +
+      (g.overlapExtra ? `\n\n${g.overlapExtra} jel két átfedő részletrajzon is szerepel, egyszer számolva.` : '');
     const key = f => 'e:' + g.codes.join(',') + '|' + f.t;
     const fs = g.findings.map(f => `<div class="eg-f${App.rvCls ? App.rvCls(key(f)) : ''}"><div><span class="pbadge ${PB(f.p)}">${f.p}%</span> <b>${esc(f.t)}</b><span class="muted"> · ${esc(f.d)}</span></div>${App.rvBtns ? App.rvBtns(key(f)) : ''}</div>`).join('') || '<span class="badge ok">Egyezik</span>';
     const btns = [
@@ -428,7 +458,7 @@
       g.rows.length ? `<button class="btn btn-sm" data-eg-sheet="${g.rows[0].row}">Táblázat</button>` : ''
     ].join(' ');
     return `<tr class="${g.findings.length ? '' : 'eg-ok'}"><td class="code">${g.codes.map(esc).join('<br>')}</td><td>${esc(g.name)}</td>
-      ${planCols ? `<td class="num" title="${esc(per)}">${g.pCount ? g.pCount + ' <span class="muted">hely</span>' : '<span class="muted">–</span>'}</td>` : ''}
+      ${planCols ? `<td class="num" title="${esc(per)}">${g.pCount ? g.pCount + ' <span class="muted">hely</span>' + (g.overlapExtra ? `<div class="faint small">átfedés: ${g.rawCount} → ${g.pCount}</div>` : '') : '<span class="muted">–</span>'}</td>` : ''}
       <td class="num">${cellQty(g.kQty, g.unit, st.konsz.length && !g.konsz.length)}</td>
       <td class="num">${cellQty(g.tjQty, g.unit, st.sheet && !g.rows.length)}</td>
       <td>${fs}</td><td class="nowrap">${btns}</td></tr>`;
