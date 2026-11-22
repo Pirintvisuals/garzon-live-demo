@@ -125,13 +125,44 @@
   /* ---------- keret ---------- */
   // A részletes tétellista (tetelek) nem külön lépés, hanem a "Tételek és gyártás" lépés aloldala.
   const stepOf = tab => (tab === 'tetelek' ? 'bontas' : tab);
+  // Oldalsáv ikonjai (egyszerű vonalas SVG, egységes 24x24 rácson).
+  const svg = d => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const ICONS = {
+    feltoltes: svg('<path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'),
+    egyezes: svg('<rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/><path d="M10 9h4M10 15h4"/>'),
+    osszefoglalo: svg('<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>'),
+    ellenorzes: svg('<path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/>'),
+    kerdesek: svg('<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="m4 7 8 6 8-6"/>'),
+    bontas: svg('<path d="M3 21V10l5 3V10l5 3V10l5 3v8z"/><path d="M3 21h18"/>'),
+    arazas: svg('<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M8 7h8M8 11h2M12 11h2M8 15h2M12 15h2M16 11v4"/>'),
+    revizio: svg('<path d="M4 12a8 8 0 0 1 14-5.3L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L4 15"/><path d="M4 20v-5h5"/>')
+  };
+  function navStatus(id) {
+    const c = counts();
+    if (id === 'feltoltes') return st.book ? { t: 'betöltve', cls: 'ok' } : { t: 'itt kezdje' };
+    if (!st.book && id !== 'egyezes') return null;
+    if (id === 'egyezes') { if (!Egyezes.ready()) return null; const n = Egyezes.state.result.groups.filter(g => g.findings.length).length; return { t: `${n} eltérés`, cls: n ? 'warn' : 'ok' }; }
+    if (st.running && ['osszefoglalo', 'ellenorzes', 'bontas', 'arazas'].includes(id)) return { t: 'készül…' };
+    if (id === 'osszefoglalo') return st.tender ? { t: 'kész', cls: 'ok' } : null;
+    if (id === 'ellenorzes') {
+      if (!st.tender && !c.read) return null;
+      const r = reviewables(), open = r.filter(k => !st.review[k]).length, ok = r.filter(k => st.review[k] === 'ok').length;
+      return open ? { t: `${open} átnézendő${ok ? ` · ${ok} jóváhagyva` : ''}`, cls: 'warn' } : { t: `${ok} jóváhagyva`, cls: 'ok' };
+    }
+    if (id === 'kerdesek') return st.letter ? { t: `${st.letter.qs.length} kérdés kész`, cls: 'ok' } : { t: 'még nincs levél' };
+    if (id === 'bontas') return c.read ? { t: `${c.items} tétel szétosztva` } : null;
+    if (id === 'arazas') return c.read ? { t: 'első árvázlat · mintaárak' } : null;
+    return null;
+  }
   function renderChrome() {
     const c = counts();
-    $('#tabs').innerHTML = tabs().map(t => {
-      // A füleken csak a lépés sorszáma látszik; a darabszámok az oldalakon vannak (két szám egymás mellett összezavaró volt).
-      const cnt = '';
+    // Oldalsáv: lépésenként ikon, név és egy rövid állapotsor (hol tart a munka).
+    $('#tabs').innerHTML = tabs().map((t, n) => {
       const disabled = t.id === 'egyezes' ? !Egyezes.ready() : (t.id !== 'feltoltes' && !st.book);
-      return `<button class="tab" role="tab" data-tab="${t.id}" style="--sec:${SEC[t.id]}" aria-selected="${stepOf(st.tab) === t.id}" ${disabled ? 'disabled' : ''}><span class="tn">${tabs().indexOf(t) + 1}</span>${t.label}${cnt}</button>`;
+      const stt = navStatus(t.id);
+      return `<button class="tab" role="tab" data-tab="${t.id}" aria-selected="${stepOf(st.tab) === t.id}" ${disabled ? 'disabled' : ''}>
+        <span class="tab-ic" aria-hidden="true">${ICONS[t.id] || ''}</span>
+        <span class="tab-tx"><span class="tab-l"><span class="tab-n">${n + 1}</span>${t.label}</span>${stt ? `<span class="tab-s ${stt.cls || ''}">${stt.t}</span>` : ''}</span></button>`;
     }).join('');
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + st.tab));
     const title = (mode === 'gk' && Egyezes.projectName()) || (st.tender ? st.tender.osszefoglalo.targy : (st.book ? st.book.fileName : 'Nincs betöltött ajánlatkérés'));
@@ -686,12 +717,13 @@
   function gkMissingHtml() {
     const list = Egyezes.missingGroups();
     if (!list.length) return '';
-    return `<div class="card eg-miss"><div class="card-h"><h3>Nincs a küldött listában: kié? (${list.length})</h3><button class="btn btn-sm" data-tab="kerdesek">Kérdés a generálkivitelezőnek →</button></div>
-      <div class="card-b"><p class="muted small" style="margin:0 0 8px">Ezek a konszignációban vagy a tervlapokon szerepelnek, a Garzonnak küldött tételjegyzékben nincs soruk. Valószínűleg más alvállalkozó szállítja őket; ha mégis az ajánlat részei, az áruk most kimaradna. Árazás előtt érdemes megerősíttetni.</p>
+    // Ezek valószínűleg más alvállalkozóé: összecsukva, hogy az árvázlat legyen elöl.
+    return `<details class="up-items eg-miss-d"><summary>Nincs a küldött listában: ${list.length} tétel, kié? <span class="muted" style="font-weight:400">· valószínűleg más alvállalkozóé; árazás előtt érdemes megerősíttetni</span></summary>
       <div class="tbl-wrap"><table class="compact"><thead><tr><th>Jel</th><th>Megnevezés</th><th class="num">Konszignáció</th><th class="num">Rajzon</th></tr></thead><tbody>
       ${list.map(g => `<tr><td class="code">${g.codes.map(esc).join(', ')}</td><td>${esc(g.name)}</td><td class="num">${g.kQty == null ? '–' : fmt(g.kQty) + ' ' + esc(g.unit)}</td><td class="num">${g.pCount ? g.pCount + ' hely' : '–'}</td></tr>`).join('')}
-      </tbody></table></div></div></div>`;
+      </tbody></table></div></details>`;
   }
+
   function viewPricing() {
     const el = $('#view-arazas');
     const gkMiss = mode === 'gk' && Egyezes.ready() ? gkMissingHtml() : '';

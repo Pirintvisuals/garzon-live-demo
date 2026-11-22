@@ -341,7 +341,8 @@
       f.sort((a, b) => b.p - a.p);
       out.push({ codes, name, tjQty, kQty, pCount, rawCount, overlapExtra, perPlan, perRoom, unit, rows: g.rows, konsz: g.konsz, hits: g.hits, findings: f, p: f.length ? f[0].p : 0 });
     }
-    out.sort((a, b) => (b.findings.length > 0) - (a.findings.length > 0) || a.codes[0].localeCompare(b.codes[0], 'hu', { numeric: true }));
+    // A legbiztosabb eltérések elöl (a valódi mennyiségi és méreteltérések), utána a kérdések, a végén az egyezők.
+    out.sort((a, b) => (b.findings.length > 0) - (a.findings.length > 0) || b.p - a.p || a.codes[0].localeCompare(b.codes[0], 'hu', { numeric: true }));
     // Sorok jel nélkül (nem párosíthatók): külön lista.
     const noCode = sheet ? sheet.rows.filter(r => !r.codes.length) : [];
     return { groups: out, noCode, sheetIssues: sheet ? sheet.issues : [], at: Date.now() };

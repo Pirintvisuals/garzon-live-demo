@@ -3,46 +3,51 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ajánlatkérés-feldolgozás · Garzon</title>
+<title>Ajánlat-előkészítő · Garzon</title>
+<link rel="icon" href="img/garzon-logo.png">
 <meta name="robots" content="noindex, nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="live.css">
+<link rel="stylesheet" href="app.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="topbar-inner">
-    <div class="brand">
-      <div class="brand-name">Garzon</div>
-      <div class="brand-sub">Ajánlatkérés-feldolgozás · előkészítés árazáshoz</div>
+<div class="app">
+  <aside class="side" aria-label="Lépések">
+    <div class="side-brand">
+      <img src="img/garzon-logo.png" alt="Garzon Bútor" width="44" height="72">
+      <div class="side-brand-t"><b>Ajánlat-előkészítő</b><span>Ajánlatadási csoport</span></div>
     </div>
-    <div class="proj" id="proj-head"></div>
-    <div class="top-actions">
-      <span class="timer" id="timer" hidden></span>
-      <button class="btn" id="btn-new" hidden>Új ajánlatkérés</button>
-      <button class="btn btn-primary" id="btn-xlsx" hidden>Munkafüzet letöltése (Excel)</button>
-    </div>
+    <div class="side-label">Munkafolyamat</div>
+    <nav class="tabs side-nav" id="tabs" role="tablist" aria-orientation="vertical"></nav>
+    <div class="side-foot">Készítette: Landscale<br><a href="mailto:milan@landscale.net">milan@landscale.net</a></div>
+  </aside>
+  <div class="app-main">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="proj" id="proj-head"></div>
+        <div class="top-actions">
+          <span class="timer" id="timer" hidden></span>
+          <button class="btn" id="btn-new" hidden>Új ajánlatkérés</button>
+          <button class="btn btn-primary" id="btn-xlsx" hidden>Munkafüzet letöltése (Excel)</button>
+        </div>
+      </div>
+    </header>
+    <main id="main">
+      <section class="view" id="view-feltoltes"></section>
+      <section class="view" id="view-egyezes"></section>
+      <section class="view" id="view-osszefoglalo"></section>
+      <section class="view" id="view-tetelek"></section>
+      <section class="view" id="view-bontas"></section>
+      <section class="view" id="view-ellenorzes"></section>
+      <section class="view" id="view-kerdesek"></section>
+      <section class="view" id="view-arazas"></section>
+      <section class="view" id="view-revizio"></section>
+    </main>
   </div>
-  <nav class="tabs" id="tabs" role="tablist"></nav>
-</header>
-
-<main id="main">
-  <section class="view" id="view-feltoltes"></section>
-  <section class="view" id="view-egyezes"></section>
-  <section class="view" id="view-osszefoglalo"></section>
-  <section class="view" id="view-tetelek"></section>
-  <section class="view" id="view-bontas"></section>
-  <section class="view" id="view-ellenorzes"></section>
-  <section class="view" id="view-kerdesek"></section>
-  <section class="view" id="view-arazas"></section>
-  <section class="view" id="view-revizio"></section>
-</main>
-
-<footer class="site-footer">
-  <p>Pirint Milán, <a href="mailto:milan@landscale.net">milan@landscale.net</a></p>
-</footer>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
