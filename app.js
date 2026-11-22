@@ -41,14 +41,14 @@
   // Mire jó az oldal, és mit érdemes rajta csinálni.
   // Generálkivitelezői munkánál néhány oldal mást csinál.
   const GUIDE_GK = {
-    kerdesek: ['A jóváhagyott hibákból és a saját észrevételekből kész levél a generálkivitelezőnek.', 'Írassa meg a kérdéseket, olvassa át, szerkessze, és küldje el árazás előtt.'],
+    kerdesek: ['A jóváhagyott hibákból és a saját észrevételekből kész levelek: a generálkivitelezőnek, a tervezőnek, és rövid üzenet a belső kollégáknak.', 'A „Kinek szól?” részben állítsa be, melyik kérdés kié, aztán írassa meg, olvassa át, és küldje el árazás előtt.'],
     arazas: ['Első árvázlat tételtípusonként. Felül a tételjegyzékből hiányzó tételek, a soroknál az eltérések.', 'Ami hiányzik vagy eltér, arra előbb kérdezzen rá; a többi tételnél nyissa meg a „Számítás” gombot.']
   };
   const GUIDE = {
     egyezes: ['A rajz, a konszignáció és a tételjegyzék összevetése alaprajzi jel szerint: mi hiányzik, mi tér el darabszámban vagy méretben.', 'Felül a legvalószínűbb eltérések állnak, lefelé csökkenő sorrendben. A „Források megnyitása” gomb egymás mellett mutatja a táblázat sorát, a konszignációs lapot és a rajzot. Az eltérések Excelben letölthetők.'],
     osszefoglalo: ['Egy pillantásra: mit talált a program ebben az ajánlatkérésben.', 'Nézze át a négy kártyát. Lent a vezetésnek szóló rész: a szerződés feltételei és kockázatai alapján érdemes-e ajánlatot adni.'],
     ellenorzes: ['Hol hibás vagy ellentmondásos a kiírás. Ha ez rejtve marad, rossz terméket áraznak be.', 'A „Forrás” gombbal ellenőrizze, majd hagyja jóvá, ami valóban tisztázandó. Amit a program nem talált meg, azt a lap alján veheti fel.'],
-    kerdesek: ['A jóváhagyott hibákból és a saját észrevételekből kész levél az ajánlatkérőnek (kiegészítő tájékoztatás-kérés).', 'Írassa meg a kérdéseket, olvassa át, szerkessze, és küldje el.'],
+    kerdesek: ['A jóváhagyott hibákból és a saját észrevételekből kész levelek: kiegészítő tájékoztatás-kérés az ajánlatkérőnek, és ha kell, rövid üzenet a belső kollégáknak.', 'A „Kinek szól?” részben állítsa be, melyik kérdés kié, aztán írassa meg, olvassa át, szerkessze, és küldje el.'],
     tetelek: ['Részletes tétellista: az ajánlatkérő szabad szöveges leírásai rendezve, méret, anyag, szín külön oszlopban.', 'Ellenőrizze a tételeket. A „Gyártás” oszlopban átállítható, ki készíti; a bontás ennek megfelelően frissül.'],
     bontas: ['A tételek rendezve és szétosztva: melyik üzem mit gyárt, és mit kell beszállítótól megvenni.', 'Adja tovább a listákat az üzemeknek. A beszállítói tételekhez kész az ajánlatkérő szöveg. Minden oszlop a „Részletes tétellista” gombbal látszik.'],
     arazas: ['Első árvázlat tételtípusonként: katalógus, beszállítói, saját gyártás, egyedi.', 'Nyisson meg egy „Számítás” gombot, és állítsa a haszon és a kockázati felár mértékét. A végső árat mindig a kolléga hagyja jóvá.'],
@@ -91,7 +91,7 @@
   }
   const fresh = () => ({
     sample: '', rev: null, prices: {}, pricing: { margin: 12, risk: 0, open: {} }, todo: {}, replay: null, replayed: false, chatCache: {}, chat: { open: false, msgs: [], draft: '' },
-    review: {}, manual: [], letter: null, letters: {}, lang: 'hu', writing: false, letterError: '', savedOffer: null,
+    review: {}, manual: [], route: {}, letter: null, letters: {}, lang: 'hu', writing: false, letterError: '', savedOffer: null,
     tab: 'feltoltes', files: { sheet: null, doc: null }, book: null, doc: null, docIndex: null,
     ai: {}, tender: null, partStatus: {}, tenderStatus: 'idle', tenderError: '',
     docs: [], reading: '', running: false, startedAt: 0, elapsedMs: 0, model: '', filter: { maker: '', part: '', onlyNotes: false }, fromSaved: false
@@ -146,10 +146,12 @@
     if (id === 'osszefoglalo') return st.tender ? { t: 'kész', cls: 'ok' } : null;
     if (id === 'ellenorzes') {
       if (!st.tender && !c.read) return null;
-      const r = reviewables(), open = r.filter(k => !st.review[k]).length, ok = r.filter(k => st.review[k] === 'ok').length;
-      return open ? { t: `${open} átnézendő${ok ? ` · ${ok} jóváhagyva` : ''}`, cls: 'warn' } : { t: `${ok} jóváhagyva`, cls: 'ok' };
+      // Csak ennek az oldalnak a felvetései (hibák és hiányzó adatok): az Egyezés eltérései az Egyezés fülön számolódnak, különben a szám nem egyezik az oldallal.
+      const r = [...allFindings().map(x => x.key), ...missingNotes().map(({ it, n }) => missKey(it, n))];
+      const nF = allFindings().length, open = r.filter(k => !st.review[k]).length, ok = r.filter(k => st.review[k] === 'ok').length;
+      return { t: `${nF} felvetés${ok ? ` · ${ok} jóváhagyva` : ''}${open && ok ? ` · ${open} vár` : ''}`, cls: open ? 'warn' : 'ok' };
     }
-    if (id === 'kerdesek') return st.letter ? { t: `${st.letter.qs.length} kérdés kész`, cls: 'ok' } : { t: 'még nincs levél' };
+    if (id === 'kerdesek') return st.letter ? { t: `${st.letter.qs.length} kérdés · ${st.letter.parts.length} címzett`, cls: 'ok' } : { t: 'még nincs levél' };
     if (id === 'bontas') return c.read ? { t: `${c.items} tétel szétosztva` } : null;
     if (id === 'arazas') return c.read ? { t: 'első árvázlat · mintaárak' } : null;
     return null;
@@ -337,12 +339,20 @@
       if (loc.found) { ok = true; where = loc.para ? esc(paraLabel(loc.para)) : esc(st.doc.fileName); if (loc.para) attr = `data-para="${loc.para}"`; }
     }
     if (!ok) {
-      const hit = (relatedIds && relatedIds.length ? relatedIds.map(itemById).filter(Boolean) : items()).find(it => Parse.quoteInItem(it, quote));
+      const hit = (relatedIds && relatedIds.length ? relatedIds.map(itemById).filter(Boolean) : items()).find(it => Parse.quoteInItem(it, quote)) || (relatedIds && relatedIds.length ? items().find(it => Parse.quoteInItem(it, quote)) : null);
       if (hit) { ok = true; where = `${esc(hit.sheet)} munkalap, ${hit.row}. sor (tétel ${esc(hit.id)})`; attr = `data-item="${esc(hit.id)}"`; }
+    }
+    // A modell néha nem egy darabban idéz (két mondatot összevon, vagy a közepét kihagyja): ilyenkor a leghosszabb, szó szerint megtalálható darabot keressük.
+    if (!ok) {
+      for (const fr of quoteFragments(quote)) {
+        if (source !== 'tetelegyzek' && st.docIndex) { const loc = Parse.locateQuote(st.docIndex, fr); if (loc.found && loc.para) { ok = true; where = esc(paraLabel(loc.para)); attr = `data-para="${loc.para}"`; break; } }
+        const hit = items().find(it => Parse.quoteInItem(it, fr));
+        if (hit) { ok = true; where = `${esc(hit.sheet)} munkalap, ${hit.row}. sor (tétel ${esc(hit.id)})`; attr = `data-item="${esc(hit.id)}"`; break; }
+      }
     }
     return `<div class="quote ${ok ? '' : 'unv'}"><span class="q-text">„${esc(quote)}”</span>${ok
       ? `<button class="q-src q-open" ${attr} data-quote="${esc(quote)}" title="Megnyitás a forrásban">Forrás: ${where} ›</button>`
-      : '<span class="q-src">Az idézet szó szerint nem található a forrásban, kérjük ellenőrizze.</span>'}</div>`;
+      : '<span class="q-src">⚠ Ezt a mondatot a program nem találta meg szó szerint a feltöltött fájlokban: valószínűleg átfogalmazva idézte. A megállapítás ettől lehet helyes, de jóváhagyás előtt nézze meg a tételt vagy a dokumentumot.</span>'}</div>`;
   }
   /* ---------- Teendők: mit kell tenni ezzel az ajánlatkéréssel (az eredményekből összeállítva) ---------- */
   function todoList() {
@@ -350,7 +360,7 @@
     const blocked = [...new Set(errorNotes().filter(e => e.p >= 50).map(e => e.it.id))].length;
     const work = [];
     work.push(st.letter
-      ? { id: 'w-kerdes', text: `${st.letter.qs.length} kérdés elküldése ${gkMode() ? 'a generálkivitelezőnek' : 'az ajánlatkérőnek'}`, hint: 'A levél a Kérdések oldalon szerkeszthető és kimásolható.', tab: 'kerdesek' }
+      ? { id: 'w-kerdes', text: `Kérdések elküldése: ${st.letter.parts.map(p => `${RCPT()[p.r].label} (${p.qs.length})`).join(', ')}`, hint: 'A levelek a Kérdések oldalon szerkeszthetők és kimásolhatók.', tab: 'kerdesek' }
       : { id: 'w-kerdes', text: 'A hibák jóváhagyása és a kérdések megírása', hint: 'A kérdések csak a jóváhagyott hibákból készülnek.', tab: 'ellenorzes' });
     if (blocked) work.push({ id: 'w-hiba', text: `${blocked} hibás vagy ellentmondásos tétel tisztázása árazás előtt`, hint: 'Ezeket a válasz megérkezéséig érdemes feltételesen árazni.', tab: 'ellenorzes' });
     if (n(m => m === 'beszallitoi')) work.push({ id: 'w-besz', text: `Beszállítói árajánlat bekérése ${n(m => m === 'beszallitoi')} tételre`, hint: 'Az ajánlatkérő szöveg kimásolható.', tab: 'bontas' });
@@ -387,6 +397,9 @@
     const el = $('#view-osszefoglalo');
     if (!st.tender) { el.innerHTML = st.tenderStatus === 'err' ? `<div class="card"><div class="card-b empty neg-t">${esc(st.tenderError)}</div></div>` : waiting('A vezetői összefoglaló'); return; }
     const o = st.tender.osszefoglalo, c = counts();
+    // Ha nem érkezett szerződés: a dokumentum hiányát a program maga jelzi (egy sor, forrás nélkül), a modell erről szóló kockázatát nem mutatjuk, mert ahhoz nincs mit idézni.
+    const noDoc = !st.docs.length;
+    const risks = noDoc ? o.kockazatok.filter(k => !(/hiány|nem érkez|nincs/i.test(k.cim) && /dokumentum|szerződés|feltétel|kiírás/i.test(k.cim + " " + k.leiras))) : o.kockazatok;
     const byMaker = Object.keys(MAKERS).map(k => ({ k, n: items().filter(i => makerOf(i) === k).length, q: qtyText(items().filter(i => makerOf(i) === k)) })).filter(x => x.n);
     let h = `<div class="view-head"><div><h2>${esc(o.targy)}</h2><p>${esc(o.ajanlatkero)}${o.eljaras ? ' · ' + esc(o.eljaras) : ''}</p></div></div>`;
     const allF = allFindings(), sure = allF.filter(x => x.p >= 50), top = sure.slice(0, 3);
@@ -408,7 +421,7 @@
       <div class="hubc warn"><div class="hub-n">${sure.length}</div><div class="hub-t">biztos vagy valószínű hibát talált a kiírásban${allF.length > sure.length ? `, és ${allF.length - sure.length} további pontot, amit érdemes megnézni` : ''}${missingNotes().length ? `. Ezen felül ${missingNotes().length} hiányzó adat (külön listában)` : ''}</div>
         <ul>${top.map(x => `<li><b>${esc(fTitle(x))}:</b> ${esc(x.kind === 'item' ? x.n.szoveg : x.f.leiras)} <span class="muted">(${x.p}%)</span></li>`).join('') || '<li class="muted">Nem talált valószínű hibát.</li>'}</ul>
         <button class="btn btn-primary" data-tab="ellenorzes">Mind megnézem</button></div>
-      ${mode === 'gk' && Egyezes.ready() ? gkHubCard() : (() => { const rvAll = reviewables(), nOk = rvAll.filter(k => st.review[k] === 'ok').length + st.manual.length; return `<div class="hubc"><div class="hub-n">${st.letter ? st.letter.qs.length : nOk}</div><div class="hub-t">${st.letter ? 'kérdés kész az ajánlatkérőnek' : 'probléma jóváhagyva; a kérdések a jóváhagyottakból készülnek'}</div>
+      ${mode === 'gk' && Egyezes.ready() ? gkHubCard() : (() => { const rvAll = reviewables(), nOk = rvAll.filter(k => st.review[k] === 'ok').length + st.manual.length; return `<div class="hubc"><div class="hub-n">${st.letter ? st.letter.qs.length : nOk}</div><div class="hub-t">${st.letter ? `kérdés kész, ${st.letter.parts.length} címzettnek` : 'probléma jóváhagyva; a kérdések a jóváhagyottakból készülnek'}</div>
         <ul>${st.letter ? st.letter.qs.slice(0, 2).map(q => `<li>${esc(q.slice(0, 150))}${q.length > 150 ? '…' : ''}</li>`).join('') : `<li>${rvAll.length - rvAll.filter(k => st.review[k]).length} felvetés vár átnézésre.</li><li>A Hibák oldalon hagyja jóvá, ami valóban tisztázandó.</li>`}</ul>
         <button class="btn" data-tab="${st.letter ? 'kerdesek' : 'ellenorzes'}">${st.letter ? 'Levél megnyitása' : 'Hibák átnézése'}</button></div>`; })()}
       <div class="hubc"><div class="hub-n">${c.items}</div><div class="hub-t">tételt rendezett és osztott szét (${esc(qtyText(items()))})</div>
@@ -419,11 +432,13 @@
         <button class="btn" data-tab="arazas">Árazás</button></div>
     </div>
     ${todoHtml()}
-    <h4 class="sec">A vezetésnek: feltételek és kockázatok a szerződésből</h4>`;
-    h += `<div class="grid g-main"><div class="card"><div class="card-h"><h3>Feltételek, amelyek az árat és a kockázatot érintik</h3></div>
-      <div class="tbl-wrap"><table><tbody>${o.feltetelek.map(f => `<tr><td class="k">${esc(f.nev)}</td><td>${esc(f.ertek)}${quoteSrc(f.idezet, 'dokumentum')}</td></tr>`).join('')}</tbody></table></div></div>
+    <h4 class="sec">${noDoc ? 'A vezetésnek: feltételek és kockázatok a küldött tételjegyzék alapján' : 'A vezetésnek: feltételek és kockázatok a szerződésből'}</h4>
+    ${noDoc ? '<p class="eg-how" style="margin-top:-4px">Szerződés vagy kiírási dokumentum nem érkezett, ezért az alábbiak csak a tételjegyzék szövegéből származnak. A fizetési feltételek, a határidő és a kötbér innen nem olvasható ki.</p>' : ''}`;
+    h += `<div class="grid g-main"><div class="card"><div class="card-h"><h3>${noDoc ? 'A tételjegyzékből kiolvasható feltételek' : 'Feltételek, amelyek az árat és a kockázatot érintik'}</h3></div>
+      <div class="tbl-wrap"><table><tbody>${o.feltetelek.map(f => `<tr><td class="k">${esc(f.nev)}</td><td>${esc(f.ertek)}${quoteSrc(f.idezet, 'dokumentum')}</td></tr>`).join('') || '<tr><td class="muted">Nincs ilyen feltétel.</td></tr>'}</tbody></table></div></div>
       <div><div class="card"><div class="card-h"><h3>Kockázatok</h3></div><div class="card-b risks">
-      ${o.kockazatok.map(k => `<div class="risk"><span class="badge ${SEV[k.sulyossag].cls}">${SEV[k.sulyossag].label}</span><div><b>${esc(k.cim)}</b><p>${esc(k.leiras)}</p>${quoteSrc(k.idezet, 'dokumentum')}</div></div>`).join('') || '<span class="muted">Nincs kiemelt kockázat.</span>'}</div></div></div></div>`;
+      ${noDoc ? `<div class="risk"><span class="badge neg">Magas</span><div><b>Nem érkezett szerződés vagy feltétel</b><p>Csak a tételjegyzék érkezett meg. A fizetési feltétel, a teljesítési határidő, a kötbér és a jótállás ezért nem ismert: ezeket ajánlatadás előtt el kell kérni.</p><p class="muted small">Ezt a program a feltöltött fájlokból állapítja meg, nem a modell.</p></div></div>` : ''}
+      ${risks.map(k => `<div class="risk"><span class="badge ${SEV[k.sulyossag].cls}">${SEV[k.sulyossag].label}</span><div><b>${esc(k.cim)}</b><p>${esc(k.leiras)}</p>${quoteSrc(k.idezet, 'dokumentum')}</div></div>`).join('') || (noDoc ? '' : '<span class="muted">Nincs kiemelt kockázat.</span>')}</div></div></div></div>`;
     el.innerHTML = h;
   }
 
@@ -433,10 +448,34 @@
     const m = (st.docIndex.meta && st.docIndex.meta[n - 1]) || {};
     return (m.file || st.doc.fileName) + ', ' + (m.page ? m.page + '. oldal' : n + '. bekezdés');
   }
-  function mark(text, quote) {
-    const i = text.toLowerCase().indexOf(String(quote || '').toLowerCase().trim());
-    if (i < 0 || !quote) return `<mark>${esc(text)}</mark>`;
-    return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + quote.trim().length)) + '</mark>' + esc(text.slice(i + quote.trim().length));
+  // Az idézet darabjai (mondatonként, kihagyásnál szétvágva), a leghosszabb elöl.
+  function quoteFragments(quote) {
+    return String(quote || '').split(/\s*(?:\.{3,}|…|\[\.{3}\]|[.;:!?]\s+|\s[–-]\s)\s*/).map(s => s.trim()).filter(s => s.length >= 18).sort((a, b) => b.length - a.length);
+  }
+  // Az idézet helye a szövegben. Ha nem pontosan egyezik (más idézőjel, sortörés, szóköz), csak a betűket és számokat
+  // hasonlítjuk, és az eredeti szövegre vetítjük vissza; végső esetben a leghosszabb egyező darabot jelöljük.
+  function findSpan(text, quote) {
+    text = String(text || ''); const q = String(quote || '').trim();
+    if (!q || !text) return null;
+    const i = text.toLowerCase().indexOf(q.toLowerCase());
+    if (i >= 0) return [i, i + q.length];
+    const map = []; let s = '';
+    for (let k = 0; k < text.length; k++) if (/[\p{L}\p{N}]/u.test(text[k])) { s += text[k].toLowerCase(); map.push(k); }
+    const sq = x => x.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    for (const part of [q, ...quoteFragments(q)]) {
+      const p = sq(part);
+      if (p.length < 6) continue;
+      const at = s.indexOf(p);
+      if (at >= 0) return [map[at], map[at + p.length - 1] + 1];
+    }
+    return null;
+  }
+  // whole: ha az idézet nem található a szövegben, az egész szöveg legyen kiemelve (bekezdésnél), vagy semmi (táblázatcellánál).
+  function mark(text, quote, whole = true) {
+    text = String(text || '');
+    const r = findSpan(text, quote);
+    if (!r) return whole ? `<mark>${esc(text)}</mark>` : esc(text);
+    return esc(text.slice(0, r[0])) + '<mark>' + esc(text.slice(r[0], r[1])) + '</mark>' + esc(text.slice(r[1]));
   }
   function openSource(d) {
     let title = '', body = '';
@@ -448,7 +487,7 @@
     } else if (d.item) {
       const it = itemById(d.item); if (!it) return;
       title = `${esc(st.book.fileName)} · ${esc(it.sheet)} munkalap · ${it.row}. sor`;
-      body = `<table class="compact"><thead><tr><th>Ssz.</th><th>Megnevezés</th><th>Leírás</th><th class="num">Mennyiség</th></tr></thead><tbody><tr><td>${esc(it.no)}</td><td>${mark(it.name, d.quote).replace(/^<mark>(.*)<\/mark>$/, '$1')}</td><td>${mark(it.spec, d.quote).replace(/^<mark>(.*)<\/mark>$/, '$1')}</td><td class="num">${fmt(it.qty)} ${esc(it.unit)}</td></tr></tbody></table>`;
+      body = `<table class="compact"><thead><tr><th>Ssz.</th><th>Megnevezés</th><th>Leírás</th><th class="num">Mennyiség</th></tr></thead><tbody><tr><td>${esc(it.no)}</td><td>${mark(it.name, d.quote, false)}</td><td>${mark(it.spec, d.quote, false)}</td><td class="num">${fmt(it.qty)} ${esc(it.unit)}</td></tr></tbody></table>`;
     } else return;
     // Gomb az eredeti fájlhoz: a táblázat sora kiemelve, illetve a PDF a megfelelő oldalon.
     let open = '';
@@ -562,18 +601,17 @@
   function downloadWorkshop(k) {
     const g = WS[k]; if (!g) return;
     const list = items().filter(i => g.test(makerOf(i)));
-    const head = [['Projekt', projectTitle()], ['Lista', g.title], ['Tételek', list.length], []];
-    const rows = [['Tétel', 'Besorolás', 'Megnevezés', 'Leírás', 'Szélesség (mm)', 'Mélység (mm)', 'Magasság (mm)', 'Anyag', 'Váz', 'Szín', 'Mennyiség', 'Egység', 'Megjegyzés', 'Forrás']];
+    const head = [[`${g.title}: gyártási lista`], [], ['Projekt', projectTitle()], ['Tételek', `${list.length} tétel · ${qtyText(list)}`], ['Készült', new Date().toLocaleDateString('hu-HU')], []];
+    const rows = [['Tétel', 'Besorolás biztonsága', 'Megnevezés', 'Leírás', 'Szélesség (mm)', 'Mélység (mm)', 'Magasság (mm)', 'Anyag', 'Váz', 'Szín', 'Mennyiség', 'Egység', 'Megjegyzés', 'Forrás']];
     list.forEach(it => {
       const a = st.ai[it.id] || {};
       const notes = notesOf(it).filter(n => st.review[missKey(it, n)] === 'ok' || (n.tipus !== 'hiany' && (n.valoszinuseg == null || n.valoszinuseg >= 50))).map(n => n.szoveg).join(' | ');
       rows.push([it.id, MCONF[makerConf(it)].label, it.name, it.spec, a.szelesseg_mm || '', a.melyseg_mm || '', a.magassag_mm || '', a.anyag || '', a.vaz || '', a.szin || '', it.qty, it.unit, notes, `${it.sheet}, ${it.row}. sor`]);
     });
-    const ws = XLSX.utils.aoa_to_sheet(head.concat(rows));
-    ws['!cols'] = [10, 12, 34, 60, 10, 10, 10, 30, 24, 16, 10, 8, 50, 22].map(w => ({ wch: w }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, g.title.slice(0, 30));
-    XLSX.writeFile(wb, `${(projectTitle() || 'ajanlatkeres').replace(/[\\/:*?"<>|]/g, '').slice(0, 60)} - ${g.title}.xlsx`);
+    const ws = XL.sheet(head.concat(rows), [10, 14, 34, 60, 11, 11, 11, 30, 24, 16, 10, 8, 50, 22], { title: [0], label: [2, 3, 4], head: [head.length], filter: true });
+    const wb = XL.book();
+    XL.add(wb, ws, g.title);
+    XL.save(wb, `${(projectTitle() || 'ajanlatkeres').replace(/[\\/:*?"<>|]/g, '').slice(0, 60)} - ${g.title}.xlsx`);
   }
   // Mennyire biztos a gyártási besorolás. Ha a feldolgozás nem adott értéket (régebbi futás), szabály alapján:
   // kézzel átállított = biztos; vegyes (fa+fém) és kárpitos = bizonytalan (attól függ, házon belül gyártják-e); a többi valószínű.
@@ -688,7 +726,10 @@
     for (const bd of PBANDS) {
       const list = all.filter(x => pband(x.p) === bd);
       if (!list.length) continue;
-      h += `<h4 class="sec">${bd.label} <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">(${bd.note})</span></h4>` + list.map(findingHtml).join('');
+      // Gyors döntés egy egész sávra: csak a még el nem döntött pontokra hat, a már megjelöltet nem írja felül.
+      const undec = list.map(x => x.key).filter(k => !st.review[k]);
+      const bulk = undec.length > 1 ? `<span class="band-act"><button class="rv-b ok" data-rvall="ok" data-keys="${esc(undec.join('§'))}">✓ Mind jóváhagyom (${undec.length})</button><button class="rv-b no" data-rvall="no" data-keys="${esc(undec.join('§'))}">✗ Egyik sem hiba</button></span>` : '';
+      h += `<h4 class="sec band-h">${bd.label} <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">(${bd.note})</span>${bulk}</h4>` + list.map(findingHtml).join('');
     }
     if (!all.length) h += `<div class="card"><div class="card-b muted">${c.read ? 'Nem talált hibát.' : 'Készül…'}</div></div>`;
     h += `<h4 class="sec">Saját észrevétel</h4>` + manualHtml();
@@ -799,74 +840,136 @@
     st.manual.forEach(m => { const it = m.item && itemById(m.item); out.push({ id: 'k:' + m.id, forras: 'saját észrevétel', tetel: it ? itemLabel(it) : '', cim: 'Saját észrevétel', leiras: m.text }); });
     return out;
   }
-  const problemsSig = list => list.map(p => p.id + '|' + p.leiras).join('§');
-  // A levél nyelve: magyar, német vagy román (a kérdéseket a modell ezen a nyelven írja).
+  // Címzettek: a kérdések nem mind ugyanannak mennek. A külső címzetteknek hivatalos levél (a választott nyelven),
+  // a belső kollégáknak rövid, tegező magyar üzenet. Alapból minden a külső címzetthez (generálkivitelező / ajánlatkérő) kerül.
+  const RCPT_ORDER = ['kulso', 'tervezo', 'beszerzes', 'uzem'];
+  const RCPT = () => ({
+    kulso: { label: gkMode() ? 'Generálkivitelező' : 'Ajánlatkérő', intern: false, hint: gkMode() ? 'eltérések, hiányzó tételek, ami az ő listájukat érinti' : 'kiegészítő tájékoztatás-kérés' },
+    tervezo: { label: 'Tervező', intern: false, hint: 'rajz, méret, konszignáció, műszaki tartalom' },
+    beszerzes: { label: 'Belső: beszerzés', intern: true, hint: 'beszállítói ár, típus, szállítási idő' },
+    uzem: { label: 'Belső: gyártás, üzem', intern: true, hint: 'gyárthatóság, anyag, munkaidő' }
+  });
+  const routeOf = p => (st.route[p.id] && RCPT()[st.route[p.id]] ? st.route[p.id] : 'kulso');
+  // Régebbi mentésben a levél egyetlen címzetté: azt a külső címzetthez soroljuk.
+  function normLetter(l) {
+    if (!l) return l;
+    if (!l.parts) l.parts = [{ r: 'kulso', qs: l.qs || [], text: l.text || '' }];
+    l.qs = l.parts.flatMap(p => p.qs);
+    return l;
+  }
+  const problemsSig = list => list.map(p => p.id + '|' + p.leiras + '|' + routeOf(p)).join('§');
+  // A levél nyelve: magyar, német vagy román (a kérdéseket a modell ezen a nyelven írja). A belső üzenet mindig magyar.
   const LANGS = { hu: 'Magyar', de: 'Deutsch', ro: 'Română' };
-  function letterText(qs, lang) {
+  function letterText(qs, lang, r = 'kulso') {
     const gk = gkMode();
+    const list = qs.map((q, n) => `${n + 1}. ${q}`).join('\n\n');
+    if (RCPT()[r].intern) {
+      const pn = projectTitle();
+      return `Szia!\n\n${pn ? `A(z) „${pn}” ajánlatához` : 'Az ajánlathoz'} ezekre lenne szükségem:\n\n${list}\n\nKöszönöm!`;
+    }
     // Közbeszerzésnél a tárgy a magyar összefoglalóból jön: idegen nyelvű levélbe nem tesszük bele.
     const pn = (lang && lang !== 'hu' && !gk) ? '' : projectTitle();
+    const asGk = gk || r === 'tervezo';
     const T = {
       hu: {
-        head: gk ? `Tisztelt Címzett!\n\n${pn ? `A(z) „${pn}” projekt` : 'A projekt'} bútor- és asztalos tételeinek árazása előtt az alábbiakat kérjük tisztázni:`
+        head: r === 'tervezo' ? `Tisztelt Tervező!\n\n${pn ? `A(z) „${pn}” projekt` : 'A projekt'} bútor- és asztalos tételeinek árazása előtt a tervekkel kapcsolatban az alábbiakat kérjük tisztázni:`
+          : asGk ? `Tisztelt Címzett!\n\n${pn ? `A(z) „${pn}” projekt` : 'A projekt'} bútor- és asztalos tételeinek árazása előtt az alábbiakat kérjük tisztázni:`
           : `Tisztelt Ajánlatkérő!\n\n${pn ? `A(z) „${pn}” tárgyú eljárásban` : 'Az eljárásban'} az alábbi kiegészítő tájékoztatást kérjük:`,
         end: 'Válaszukat előre is köszönjük.\n\nTisztelettel:\nGarzon'
       },
       de: {
-        head: gk ? `Sehr geehrte Damen und Herren,\n\nvor der Kalkulation der Möbel- und Tischlerpositionen ${pn ? `des Projekts „${pn}“` : 'des Projekts'} bitten wir um Klärung der folgenden Punkte:`
-          : `Sehr geehrte Damen und Herren,
-
-im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`,
+        head: asGk ? `Sehr geehrte Damen und Herren,\n\nvor der Kalkulation der Möbel- und Tischlerpositionen ${pn ? `des Projekts „${pn}“` : 'des Projekts'} bitten wir um Klärung der folgenden Punkte:`
+          : `Sehr geehrte Damen und Herren,\n\nim vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`,
         end: 'Für Ihre Antwort bedanken wir uns im Voraus.\n\nMit freundlichen Grüßen\nGarzon'
       },
       ro: {
-        head: gk ? `Stimate doamne și domni,\n\nînainte de ofertarea pozițiilor de mobilier și tâmplărie ${pn ? `ale proiectului „${pn}”` : 'ale proiectului'}, vă rugăm să clarificați următoarele:`
-          : `Stimate doamne și domni,
-
-în cadrul prezentei proceduri vă rugăm să ne furnizați următoarele clarificări:`,
+        head: asGk ? `Stimate doamne și domni,\n\nînainte de ofertarea pozițiilor de mobilier și tâmplărie ${pn ? `ale proiectului „${pn}”` : 'ale proiectului'}, vă rugăm să clarificați următoarele:`
+          : `Stimate doamne și domni,\n\nîn cadrul prezentei proceduri vă rugăm să ne furnizați următoarele clarificări:`,
         end: 'Vă mulțumim anticipat pentru răspuns.\n\nCu stimă,\nGarzon'
       }
     }[lang || 'hu'];
-    return `${T.head}\n\n${qs.map((q, n) => `${n + 1}. ${q}`).join('\n\n')}\n\n${T.end}`;
+    return `${T.head}\n\n${list}\n\n${T.end}`;
   }
-  const questionsText = () => (st.letter ? st.letter.text : '');
+  const questionsText = () => (st.letter ? st.letter.parts.map(p => p.text).join('\n\n\n') : '');
   async function writeQuestions() {
     const probs = approvedProblems();
     if (!probs.length || st.writing) return;
     st.writing = true; st.letterError = ''; render();
-    let qs;
-    try {
-      const out = await api('questions', { cimzett: gkMode() ? 'gk' : 'ajanlatkero', projekt: projectTitle(), problems: probs, nyelv: st.lang });
-      qs = out.kerdesek.map(q => cleanQ(q.kerdes));
-    } catch (e) {
-      // Ha a szolgáltatás nem érhető el, egyszerű vázlat a jóváhagyott problémákból (szerkeszthető).
-      qs = probs.map(p => `${p.tetel ? p.tetel + ': ' : ''}${p.leiras || p.cim} Kérjük pontosítani.`);
-      st.letterError = 'A kérdések megírása most nem sikerült (' + e.message + '). Egyszerű vázlat készült a jóváhagyott problémákból.';
-    }
-    st.letter = { qs, sig: problemsSig(probs), text: letterText(qs, st.lang), lang: st.lang };
+    const R = RCPT(), errs = [];
+    const groups = RCPT_ORDER.map(r => ({ r, probs: probs.filter(p => routeOf(p) === r) })).filter(g => g.probs.length);
+    // Címzettenként külön kérés, egyszerre: a modell minden címzettnek a saját hangnemében ír.
+    const parts = await Promise.all(groups.map(async ({ r, probs: ps }) => {
+      const lang = R[r].intern ? 'hu' : st.lang;
+      let qs;
+      try {
+        const cimzett = r === 'kulso' ? (gkMode() ? 'gk' : 'ajanlatkero') : r;
+        const out = await api('questions', { cimzett, projekt: projectTitle(), problems: ps, nyelv: lang });
+        qs = out.kerdesek.map(q => cleanQ(q.kerdes));
+      } catch (e) {
+        // Ha a szolgáltatás nem érhető el, egyszerű vázlat a jóváhagyott problémákból (szerkeszthető).
+        qs = ps.map(p => `${p.tetel ? p.tetel + ': ' : ''}${p.leiras || p.cim} ${R[r].intern ? 'Kérlek, nézd meg.' : 'Kérjük pontosítani.'}`);
+        errs.push(`${R[r].label}: ${e.message}`);
+      }
+      return { r, qs, text: letterText(qs, lang, r) };
+    }));
+    if (errs.length) st.letterError = 'A kérdések megírása nem sikerült minden címzettnél (' + errs.join('; ') + '). Ezeknél egyszerű vázlat készült a jóváhagyott problémákból.';
+    st.letter = normLetter({ parts, sig: problemsSig(probs), lang: st.lang });
     st.letters[st.lang] = st.letter;
     st.writing = false; render(); saveJobSoon();
+  }
+  // Ki kapja a kérdést: soronként választható. Azonos forrású pontoknál (például 22 „nincs a küldött listában”) egyszerre is átállítható.
+  function routeHtml(probs) {
+    const R = RCPT();
+    const opts = cur => RCPT_ORDER.map(k => `<option value="${k}" ${k === cur ? 'selected' : ''}>${esc(R[k].label)}</option>`).join('');
+    const counts = RCPT_ORDER.map(k => ({ k, n: probs.filter(p => routeOf(p) === k).length })).filter(x => x.n);
+    // Az ismétlődő, azonos című pontok (például 22 „nincs a küldött listában”) egy sorban, egy választóval.
+    const byCim = {};
+    probs.forEach(p => (byCim[p.cim] = byCim[p.cim] || []).push(p));
+    const rows = [], seen = new Set();
+    probs.forEach(p => {
+      const grp = byCim[p.cim];
+      if (grp.length >= 3) { if (!seen.has(p.cim)) { seen.add(p.cim); rows.push({ grp }); } }
+      else rows.push({ p });
+    });
+    return `<div class="card route"><div class="card-h"><h3>Kinek szól?</h3><span class="muted small">${counts.map(x => `${esc(R[x.k].label)}: <b>${x.n}</b>`).join(' · ')}</span></div>
+      <div class="card-b"><p class="muted" style="margin:0 0 10px">Nem minden kérdés ugyanannak megy. Állítsa át, ami a tervezőre, a beszerzésre vagy az üzemre tartozik: a program címzettenként külön levelet ír, a belső kollégáknak rövid üzenetet.</p>
+      <div class="tbl-wrap"><table class="compact"><thead><tr><th>Tétel</th><th>Probléma</th><th>Címzett</th></tr></thead><tbody>
+      ${rows.map(({ p, grp }) => {
+        if (grp) {
+          const rs = new Set(grp.map(routeOf)), cur = rs.size === 1 ? [...rs][0] : '';
+          return `<tr><td class="muted">${grp.length} tétel: ${esc(shortName(grp.map(x => x.tetel.split(' – ')[0]).join(', '), 70))}</td><td><b>${esc(grp[0].cim)}</b> <span class="muted small">· egy kérdésben</span></td>
+            <td><select class="route-sel r-${cur || 'kulso'}" data-route-all="${esc(grp.map(x => x.id).join('§'))}">${cur ? '' : '<option value="">vegyes</option>'}${opts(cur)}</select></td></tr>`;
+        }
+        return `<tr><td class="muted">${esc(shortName(p.tetel || 'általános', 60))}</td><td><b>${esc(p.cim)}</b>${p.leiras && p.leiras !== p.cim ? ` <span class="muted small">· ${esc(shortName(p.leiras, 110))}</span>` : ''}</td>
+        <td><select class="route-sel r-${routeOf(p)}" data-route="${esc(p.id)}">${opts(routeOf(p))}</select></td></tr>`;
+      }).join('')}
+      </tbody></table></div></div></div>`;
   }
   function viewQuestions() {
     const el = $('#view-kerdesek');
     if (!st.book) { el.innerHTML = waiting('A kérdéslista'); return; }
-    const probs = approvedProblems(), all = reviewables();
+    const probs = approvedProblems(), all = reviewables(), R = RCPT();
     const open = all.filter(k => !st.review[k]).length, own = st.manual.length;
-    const who = gkMode() ? 'a generálkivitelezőnek' : 'az ajánlatkérőnek';
-    let h = `<div class="view-head"><div><h2>Kérdések ${who}</h2><p>A kérdések a jóváhagyott hibákból és a saját észrevételekből készülnek. Küldés előtt szerkeszthető.</p></div></div>`;
+    let h = `<div class="view-head"><div><h2>Kérdések</h2><p>A kérdések a jóváhagyott hibákból és a saját észrevételekből készülnek, címzettenként külön levélben. Küldés előtt szerkeszthető.</p></div></div>`;
     h += `<div class="card"><div class="card-b q-sum"><div><b>${probs.length}</b> jóváhagyott probléma${own ? ` (ebből ${own} saját észrevétel)` : ''} · <span class="muted">${open} felvetés még nincs átnézve</span></div>
-      <div class="actions"><label class="lang-l">A levél nyelve <select id="q-lang" ${st.writing ? 'disabled' : ''}>${Object.entries(LANGS).map(([k, v]) => `<option value="${k}" ${st.lang === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+      <div class="actions"><label class="lang-l">A külső levelek nyelve <select id="q-lang" ${st.writing ? 'disabled' : ''}>${Object.entries(LANGS).map(([k, v]) => `<option value="${k}" ${st.lang === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
       ${probs.length ? `<button class="btn btn-primary" id="btn-write-q" ${st.writing ? 'disabled' : ''}>${st.writing ? '<span class="spin"></span> Kérdések írása…' : (st.letter ? 'Kérdések újraírása' : 'Kérdések megírása')}</button>` : ''}
       <button class="btn" data-tab="ellenorzes">Hibák átnézése</button>${gkMode() && Egyezes.ready() ? '<button class="btn" data-tab="egyezes">Egyezés átnézése</button>' : ''}</div></div></div>`;
-    if (st.letter && st.letter.sig !== problemsSig(probs)) h += `<div class="callout warn-c">A jóváhagyások megváltoztak a levél megírása óta. A „Kérdések újraírása” gombbal frissíthető.</div>`;
+    if (st.letter && st.letter.sig !== problemsSig(probs)) h += `<div class="callout warn-c">A jóváhagyások vagy a címzettek megváltoztak a levél megírása óta. A „Kérdések újraírása” gombbal frissíthető.</div>`;
     if (st.letterError) h += `<div class="callout warn-c">${esc(st.letterError)}</div>`;
     if (!probs.length) h += `<div class="card"><div class="card-b empty">Még nincs jóváhagyott probléma. A <b>Hibák a kiírásban</b>${gkMode() ? ' és az <b>Egyezés</b>' : ''} oldalon a „Jóváhagyom” gombbal jelölje meg, ami valóban tisztázandó, vagy vegyen fel saját észrevételt. A kérdések ezekből készülnek.</div></div>`;
+    else h += routeHtml(probs);
     if (st.letter) {
-      h += `<div class="grid g-main"><div class="card"><div class="card-h"><h3>Kérdések (${st.letter.qs.length})</h3></div><div class="card-b qs">${st.letter.qs.map((q, n) => `<div class="q"><span class="q-n">${n + 1}.</span><div><p class="q-k">${esc(q)}</p></div></div>`).join('')}</div></div>
-        <div class="card"><div class="card-h"><h3>Levél · ${LANGS[st.letter.lang || 'hu']}</h3><span><button class="btn btn-sm" id="btn-mail">E-mail megnyitása</button> <button class="btn btn-primary btn-sm" id="btn-copy-letter">Szöveg másolása</button></span></div><div class="card-b"><textarea class="letter-ta" id="letter-text" rows="22">${esc(st.letter.text)}</textarea></div></div></div>`;
+      st.letter.parts.forEach(p => {
+        const rc = R[p.r] || R.kulso, lang = rc.intern ? 'hu' : (st.letter.lang || 'hu');
+        h += `<h4 class="sec q-to"><span class="route-tag r-${p.r}">${esc(rc.label)}</span> ${p.qs.length} kérdés${rc.intern ? ' · belső üzenet' : ` · ${LANGS[lang]}`}</h4>
+          <div class="grid g-main"><div class="card"><div class="card-h"><h3>Kérdések (${p.qs.length})</h3></div><div class="card-b qs">${p.qs.map((q, n) => `<div class="q"><span class="q-n">${n + 1}.</span><div><p class="q-k">${esc(q)}</p></div></div>`).join('')}</div></div>
+          <div class="card"><div class="card-h"><h3>${rc.intern ? 'Üzenet' : 'Levél'}</h3><span><button class="btn btn-sm" data-mail="${p.r}">E-mail megnyitása</button> <button class="btn btn-primary btn-sm" data-copy-letter="${p.r}">Szöveg másolása</button></span></div><div class="card-b"><textarea class="letter-ta" data-letter="${p.r}" rows="${Math.min(22, 8 + p.qs.length * 3)}">${esc(p.text)}</textarea></div></div></div>`;
+      });
     }
     el.innerHTML = h;
   }
+  const letterPart = r => (st.letter ? st.letter.parts.find(p => p.r === r) : null);
 
   /* ---------- Revízió ---------- */
   // Szavankénti eltérés megjelenítése; a hosszú változatlan szakaszokat összecsukjuk.
@@ -1304,7 +1407,7 @@ im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`
   function saveJob() {
     if (!done() || !st.tender || st.running) return;
     const jobs = readJobs(), fp = fingerprint();
-    jobs[fp] = { savedAt: new Date().toISOString(), title: projectTitle(), snap: { ...snapshot(), review: st.review, manual: st.manual, letters: st.letters, lang: st.lang } };
+    jobs[fp] = { savedAt: new Date().toISOString(), title: projectTitle(), snap: { ...snapshot(), review: st.review, manual: st.manual, route: st.route, letters: st.letters, lang: st.lang } };
     const keys = Object.keys(jobs).sort((a, b) => (jobs[b].savedAt > jobs[a].savedAt ? 1 : -1));
     keys.slice(8).forEach(k => delete jobs[k]);
     for (let n = 0; n < 8; n++) {
@@ -1323,7 +1426,8 @@ im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`
     const j = readJobs()[fingerprint()]; if (!j) return;
     const s = j.snap;
     restore(s); st.replay = null; st.replayed = false;
-    Object.assign(st, { review: s.review || {}, manual: s.manual || [], letters: s.letters || {}, lang: s.lang || 'hu' });
+    Object.assign(st, { review: s.review || {}, manual: s.manual || [], route: s.route || {}, letters: s.letters || {}, lang: s.lang || 'hu' });
+    Object.keys(st.letters).forEach(k => { st.letters[k] = normLetter(st.letters[k]); });
     st.letter = st.letters[st.lang] || null;
     render();
   }
@@ -1337,7 +1441,7 @@ im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`
     st.tab = 'osszefoglalo'; render();
   }
   root.App.snapshot = snapshot; root.App.rescore = rescore; root.App.rfqText = rfqText; root.App.questionsText = () => (st.tender ? questionsText() : '');
-  root.App.helpers = { items, makerOf, notesOf, dims, counts, earlierFlags, priceOf, todoList, NOTE_TYPES, SEV, FIND_TYPES, IMPACT };
+  root.App.helpers = { items, makerOf, notesOf, dims, counts, earlierFlags, priceOf, todoList, recipients: RCPT, NOTE_TYPES, SEV, FIND_TYPES, IMPACT };
 
   /* ---------- események ---------- */
   const copy = (text, btn) => navigator.clipboard.writeText(text).then(() => { const t = btn.textContent; btn.textContent = 'Kimásolva'; setTimeout(() => { btn.textContent = t; }, 1500); });
@@ -1370,6 +1474,7 @@ im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`
     else if (t.id === 'btn-saved-run') fetch(savedFile()).then(r => r.json()).then(s => { restore(s); st.replay = null; render(); }).catch(() => alert('A korábbi feldolgozás nem tölthető be.'));
     else if (t.dataset.mode) { mode = t.dataset.mode; if (st.tab === 'egyezes' && mode !== 'gk') st.tab = 'feltoltes'; render(); }
     else if (t.dataset.retry) retry(t.dataset.retry);
+    else if (t.dataset.rvall) { const y = window.scrollY; t.dataset.keys.split('§').forEach(k => { if (!st.review[k]) st.review[k] = t.dataset.rvall; }); render(); window.scrollTo(0, y); saveJobSoon(); }
     else if (t.dataset.rv) { const y = window.scrollY, k = t.dataset.rv; st.review[k] = st.review[k] === t.dataset.v ? '' : t.dataset.v; render(); window.scrollTo(0, y); saveJobSoon(); }
     else if (t.id === 'man-add') { const txt = ($('#man-text') || {}).value || ''; if (txt.trim()) { st.manual.push({ id: Date.now().toString(36), item: ($('#man-item') || {}).value || '', text: txt.trim() }); const y = window.scrollY; render(); window.scrollTo(0, y); } }
     else if (t.dataset.manDel) { st.manual = st.manual.filter(m => m.id !== t.dataset.manDel); const y = window.scrollY; render(); window.scrollTo(0, y); }
@@ -1377,16 +1482,18 @@ im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`
     else if (t.dataset.upManual !== undefined) { st.manualOpen = !st.manualOpen; render(); }
     else if (t.id === 'btn-open-saved') openSaved();
     else if (t.id === 'btn-run-again') { st.savedOffer = null; run(); }
-    else if (t.id === 'btn-mail') { const txt = ($('#letter-text') || {}).value || questionsText(); const subj = (gkMode() ? 'Kérdések: ' : 'Kiegészítő tájékoztatás-kérés: ') + projectTitle(); location.href = 'mailto:?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(txt); }
+    else if (t.dataset.mail) { const p = letterPart(t.dataset.mail); if (p) { const rc = RCPT()[p.r]; const subj = (rc.intern ? 'Ajánlat: ' : p.r === 'kulso' && !gkMode() ? 'Kiegészítő tájékoztatás-kérés: ' : 'Kérdések: ') + projectTitle(); location.href = 'mailto:?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(p.text); } }
     else if (t.dataset.ws) downloadWorkshop(t.dataset.ws);
-    else if (t.id === 'btn-copy-letter') copy(($('#letter-text') || {}).value || questionsText(), t);
+    else if (t.dataset.copyLetter) { const p = letterPart(t.dataset.copyLetter); if (p) copy(p.text, t); }
     else if (t.id === 'btn-rfq') copy(rfqText(), t);
   });
   document.addEventListener('change', e => {
     const t = e.target;
     if (t.type === 'file' && t.files[0]) { const k = t.closest('.drop').dataset.kind; if (k === 'all') loadAll([...t.files]); else if (k === 'egyezes') Egyezes.addFiles([...t.files]); else if (k === 'rev') setRevision(t.files[0]); else { if (k === 'sheet') st.sample = ''; setFile(k, k === 'doc' ? [...t.files] : t.files[0]); } }
     else if (t.dataset.maker) { st.ai[t.dataset.maker].gyarto = t.value; st.ai[t.dataset.maker].gyarto_indok = 'Kézzel átállítva.'; const y = window.scrollY; render(); window.scrollTo(0, y); saveJobSoon(); }
-    else if (t.id === 'q-lang') { st.lang = t.value; st.letter = st.letters[st.lang] || null; render(); saveJobSoon(); }
+    else if (t.dataset.route) { const y = window.scrollY; st.route[t.dataset.route] = t.value; render(); window.scrollTo(0, y); saveJobSoon(); }
+    else if (t.dataset.routeAll && t.value) { const y = window.scrollY; t.dataset.routeAll.split('§').forEach(k => { st.route[k] = t.value; }); render(); window.scrollTo(0, y); saveJobSoon(); }
+    else if (t.id === 'q-lang') { st.lang = t.value; st.letter = normLetter(st.letters[st.lang]) || null; render(); saveJobSoon(); }
     else if (t.id === 'f-part') { st.filter.part = t.value; render(); }
     else if (t.id === 'f-maker') { st.filter.maker = t.value; render(); }
     else if (t.id === 'f-notes') { st.filter.onlyNotes = t.checked; render(); }
@@ -1406,7 +1513,7 @@ im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`
   }));
   // A „Fájlok egyenként” rész nyitva maradjon a következő rajzoláskor is.
   document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('up-manual')) { const o = e.target.open; if (st.manualOpen !== o) { st.manualOpen = o; render(); } } }, true);
-  document.addEventListener('input', e => { if (e.target.id === 'letter-text' && st.letter) { st.letter.text = e.target.value; saveJobSoon(); } });
+  document.addEventListener('input', e => { const p = e.target.dataset && e.target.dataset.letter && letterPart(e.target.dataset.letter); if (p) { p.text = e.target.value; saveJobSoon(); } });
   document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'chat-in') { e.preventDefault(); askChat(e.target.value); } });
   // Ctrl+Shift+S: a feldolgozott eredmény mentése JSON-ba (ebből lesz a data/mentett.json tartalék).
   document.addEventListener('keydown', e => {

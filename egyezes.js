@@ -96,7 +96,7 @@
         const no = noCell && !noErr ? noCell.v : '';
         const spec = col.spec != null ? String(val(r, col.spec)).trim() : '';
         const row = { row: r + 1, sheet: sheetName, no, codeCell, codes: expandCodes(codeCell), text, spec, qty: Number.isFinite(qty) ? qty : null, unit: String(col.unit != null ? val(r, col.unit) : '').trim() || 'db', section, hidden, issues: [] };
-        if (hidden) row.issues.push({ t: 'Rejtett sor', d: 'A sor el van rejtve a táblázatban. Lehet szándékos (nem része a munkának), lehet véletlen: nyomtatásban nem látszik. Érdemes megkérdezni, hogy árazandó-e.', p: 50 });
+        if (hidden) row.issues.push({ t: 'Rejtett sor', d: `Az Excelben a ${r + 1}. sor el van rejtve: megnyitáskor és nyomtatásban nem látszik, csak az elrejtés megszüntetésével. Ezért könnyű kihagyni az árból. Lehet szándékos (nem része a munkának), lehet véletlen: érdemes megkérdezni, hogy árazandó-e.`, p: 50 });
         if (noErr) row.issues.push({ t: 'Hibás sorszám', d: 'A sorszám cellája hibás hivatkozást ad (#REF!): a táblázatból sorokat töröltek vagy másoltak, a sorszámozás nem megbízható.', p: 60 });
         if (/nincs pontos adat|nincs adat|rajz szerint\?|tisztázandó/i.test(text + ' ' + spec)) row.issues.push({ t: 'Hiányzó adat', d: `A sor szövege szerint nincs pontos adat: „${text.replace(/\s+/g, ' ').slice(0, 80)}”.`, p: 90 });
         if (!row.codes.length) row.issues.push({ t: 'Nincs alaprajzi jel', d: 'A tételnek nincs jele, ezért nem párosítható a konszignációval és a rajzzal.', p: 60 });
@@ -211,9 +211,14 @@
           if (!PREFIX_OK.test(code)) continue;
           const L = i.str.length || 1, tw = i.width || 0;
           const fs = Math.hypot(i.transform[2], i.transform[3]) || i.height || 8;
-          // pdf.js koordináta (bal alsó sarok) -> nézet koordináta (bal felső sarok)
-          const [vx, vy] = vp.convertToViewportPoint(i.transform[4] + tw * (m.index / L), i.transform[5]);
-          hits.push({ code, page: p, x: vx, y: vy - fs, w: Math.max(tw * (code.length / L), fs * 2), h: fs * 1.2 });
+          // A felirat lehet elforgatva (a tervlapokon a jel gyakran függőleges): a jel közepét a szöveg irányában számoljuk,
+          // így a karika a jelre kerül, nem mellé. pdf.js koordináta (bal alsó sarok) -> nézet koordináta (bal felső sarok).
+          const len = Math.hypot(i.transform[0], i.transform[1]) || 1, ux = i.transform[0] / len, uy = i.transform[1] / len;
+          const lc = tw * (code.length / L), along = tw * (m.index / L) + lc / 2;
+          const [cx, cy] = vp.convertToViewportPoint(i.transform[4] + ux * along - uy * fs * 0.4, i.transform[5] + uy * along + ux * fs * 0.4);
+          const vertical = Math.abs(uy) > Math.abs(ux);
+          const w = vertical ? fs * 1.2 : Math.max(lc, fs * 2), hh = vertical ? Math.max(lc, fs * 2) : fs * 1.2;
+          hits.push({ code, page: p, x: cx - w / 2, y: cy - hh / 2, w, h: hh, fs });
         }
       }
     }
@@ -329,7 +334,9 @@
       if (kMax.length && tFull.length) {
         const lim = [...kMax[0].v].sort((a, b) => a - b);
         const plan = [...tFull[0].v].sort((a, b) => a - b).slice(0, 2); // a két kisebb méret az alapterület
-        if (plan[0] > lim[0] + 0.5 || plan[1] > lim[1] + 0.5) f.push({ t: 'Nem fér el a megadott helyen', d: `A konszignáció legfeljebb ${kMax[0].raw} alapterületet enged, a tételjegyzék szerinti termék ${tFull[0].raw}.`, p: 90 });
+        // A szöveg magyarázza is: a termék két kisebb mérete az alapterület, így akárhogy állítják, az egyik oldala nagyobb a megengedettnél.
+        const over = plan[1] > lim[1] + 0.5 ? [plan[1], lim[1]] : [plan[0], lim[0]];
+        if (plan[0] > lim[0] + 0.5 || plan[1] > lim[1] + 0.5) f.push({ t: 'Nem fér el a megadott helyen', d: `A konszignáció legfeljebb ${kMax[0].raw} alapterületet enged. A tételjegyzék szerinti termék ${tFull[0].raw}: a két kisebb mérete ${fmt(plan[0])} × ${fmt(plan[1])} cm, tehát akárhogy állítják, az egyik oldala ${fmt(over[0])} cm, a megengedett ${fmt(over[1])} cm helyett.`, p: 90 });
       }
       // Gyanús érték magában a konszignációban: ülőmunkához való asztal 90 cm-nél magasabb.
       for (const k of g.konsz) {
@@ -407,16 +414,61 @@
       const [gi, hi] = cv.dataset.crop.split('|').map(Number);
       const g = st.result && st.result.groups[gi], h = g && g.hits[hi];
       const ctx = cv.getContext('2d');
-      const cache = h && pageCache[h.fileName + '|' + h.page];
-      if (!cache) { ctx.fillStyle = '#f3f4f6'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.fillStyle = '#6b7280'; ctx.font = '12px sans-serif'; ctx.fillText('rajzolás…', 10, 20); return; }
+      if (!h) return;
+      const cache = pageCache[h.fileName + '|' + h.page];
+      const key = cropKey(h);
+      cv.dataset.ck = key;
+      if (sharp[key]) { ctx.drawImage(sharp[key], 0, 0, cv.width, cv.height); cv.dataset.done = '1'; return; }
+      // Az éles kivágás nem vár a teljes lap gyorsítótárára.
+      const wantSharp = hi < SHARP_MAX;
+      if (!cache) { ctx.fillStyle = '#f3f4f6'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.fillStyle = '#6b7280'; ctx.font = '22px sans-serif'; ctx.fillText('rajzolás…', 18, 38); if (wantSharp) sharpCrop(h, cv.width, cv.height); return; }
+      // Előbb a gyorsítótárból (azonnal, de elmosódott), aztán a sorban kirajzolt éles változat váltja.
       const z = cache.scale, cx = (h.x + h.w / 2) * z, cy = (h.y + h.h / 2) * z;
       const sw = 220, sh = 147;
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
       ctx.drawImage(cache.canvas, cx - sw / 2, cy - sh / 2, sw, sh, 0, 0, cv.width, cv.height);
-      ctx.strokeStyle = '#d62828'; ctx.lineWidth = 2.5; ctx.beginPath();
-      ctx.arc(cv.width / 2, cv.height / 2, Math.max(18, Math.max(h.w, h.h) * z * (cv.width / sw) * 0.9 + 8), 0, Math.PI * 2); ctx.stroke();
       cv.dataset.done = '1';
+      if (wantSharp) sharpCrop(h, cv.width, cv.height);
     });
+  }
+  // Éles kivágás: a jel környéke külön, nagy felbontással kirajzolva. A gyorsítótárban tárolt lap ehhez kicsi
+  // (egy nagy tervlapon a jel felirata ott csak 2-3 képpont), ezért a karika alatt nem lehetett elolvasni a jelet.
+  // Egy éles kivágás egy nagy tervlapon kb. 4-5 másodperc (a pdf.js a teljes rajzot végigolvassa hozzá), ezért kártyánként
+  // csak az első néhány élesedik, a többi gyors előnézet marad (kattintásra a teljes tervlap nyílik). A legutóbb kért van elöl.
+  const SHARP_MAX = 4;
+  const sharp = {}, jobs = [];
+  let working = false;
+  const cropKey = h => `${h.fileName}|${h.page}|${Math.round(h.x)}|${Math.round(h.y)}`;
+  function sharpCrop(h, W, H) {
+    const key = cropKey(h);
+    if (sharp[key] || jobs.some(j => j.key === key)) return;
+    jobs.push({ key, h, W, H });
+    if (!working) runJobs();
+  }
+  async function runJobs() {
+    working = true;
+    try {
+      while (jobs.length) {
+        const { key, h, W, H } = jobs.pop();
+        if (sharp[key] || !document.querySelector(`canvas[data-ck="${CSS.escape(key)}"]`)) continue;
+        const pdf = pdfDocs[h.fileName]; if (!pdf) continue;
+        try {
+          const page = await pdf.getPage(h.page);
+          const fs = h.fs || (h.h / 1.2) || 8;
+          const scale = Math.max(1.5, Math.min(8, 20 / fs)); // a jel felirata kb. 20 képpont magas legyen
+          const cx = (h.x + h.w / 2) * scale, cy = (h.y + h.h / 2) * scale;
+          const vp = page.getViewport({ scale, offsetX: W / 2 - cx, offsetY: H / 2 - cy });
+          const c = document.createElement('canvas'); c.width = W; c.height = H;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+          await page.render({ canvasContext: ctx, viewport: vp, intent: 'print' }).promise;
+          ctx.strokeStyle = '#d62828'; ctx.lineWidth = 3; ctx.beginPath();
+          ctx.arc(W / 2, H / 2, Math.max(22, Math.max(h.w, h.h) * scale * 0.7 + 10), 0, Math.PI * 2); ctx.stroke();
+          sharp[key] = c;
+          document.querySelectorAll(`canvas[data-ck="${CSS.escape(key)}"]`).forEach(x => x.getContext('2d').drawImage(c, 0, 0, x.width, x.height));
+        } catch (e) { /* marad a gyors előnézet */ }
+      }
+    } finally { working = false; }
   }
   // A tételjegyzék jelhez nem köthető hibái egy listában (kihagyott sorszám, jel nélküli sor). Jóváhagyhatók, mint a többi felvetés.
   function sheetFindings() {
@@ -455,7 +507,7 @@
   const SHEET_WHY = {
     'Kihagyott sorszámok': 'A sorszámozásban lyuk van: valószínűleg sorokat töröltek a táblázatból. Ha a törölt sor egy tétel volt, az nem kerül bele az árba.',
     'Nincs alaprajzi jel': 'A tételhez nincs alaprajzi jel, ezért a program nem tudja párosítani a konszignációval és a rajzzal. A méretét és darabszámát kézzel kell ellenőrizni.',
-    'Rejtett sor': 'A sor el van rejtve az Excelben, nyomtatásban nem látszik. Lehet szándékos, de lehet véletlen: rá kell kérdezni, hogy árazandó-e.',
+    'Rejtett sor': 'Ezek a sorok el vannak rejtve az Excelben: megnyitáskor és nyomtatásban nem látszanak, csak az elrejtés megszüntetésével. Ezért könnyű kihagyni őket az árból. Lehet szándékos (nem része a munkának), lehet véletlen: egy kérdésben érdemes tisztázni, hogy árazandók-e.',
     'Hibás sorszám': 'A sorszám cellája hibás hivatkozás (#REF!): sorokat töröltek vagy másoltak, a sorszámozás nem megbízható.',
     'Hiányzó adat': 'A sor szövege szerint nincs pontos adat. Árazás előtt tisztázni kell.',
     'Nincs mennyiség': 'A mennyiség cellája üres vagy nem szám, ezért a tétel nem árazható.'
@@ -580,7 +632,7 @@
         <div>${esc(k.name)}</div>${k.dims.length ? `<div class="muted small">Méret: ${k.dims.map(d => esc(d.raw) + (d.max ? ' (legfeljebb)' : '')).join('; ')}</div>` : ''}${k.qtyRaw ? `<div class="muted small">${esc(k.qtyRaw)}</div>` : ''}
         <button class="btn btn-sm" data-eg-page="${esc(k.fileName)}|${k.page}">Lap</button></div>`).join('') : '<div class="muted">Nincs konszignációs lapja.</div>';
     const MAX = 18;
-    const pl = g.hits.length ? `<div class="eg-crops">${g.hits.slice(0, MAX).map((h, i) => `<button class="eg-crop" data-eg-hit="${idx}|${i}" title="Megnyitás a tervlapon"><canvas data-crop="${idx}|${i}" width="198" height="132"></canvas><span>${esc(h.label.replace(/ALAPRAJZ,?\s*/i, '').trim())}${h.room ? ' · ' + esc(h.room) : ''}</span></button>`).join('')}</div>
+    const pl = g.hits.length ? `<div class="eg-crops">${g.hits.slice(0, MAX).map((h, i) => `<button class="eg-crop" data-eg-hit="${idx}|${i}" title="Megnyitás a tervlapon"><canvas data-crop="${idx}|${i}" width="396" height="264"></canvas><span>${esc(h.label.replace(/ALAPRAJZ,?\s*/i, '').trim())}${h.room ? ' · ' + esc(h.room) : ''}</span></button>`).join('')}</div>
         ${g.hits.length > MAX ? `<div class="muted small">…és még ${g.hits.length - MAX} hely</div>` : ''}${g.overlapExtra ? `<div class="muted small">${g.overlapExtra} jel két átfedő részletrajzon is szerepel; a darabszámban egyszer számolva (${g.rawCount} → ${g.pCount}).</div>` : ''}` : '<div class="muted">A feltöltött tervlapokon nem szerepel.</div>';
     return `<div class="eg-detail-g">
       <div><h5>Tételjegyzék · ${g.tjQty == null ? '–' : fmt(g.tjQty) + ' ' + esc(g.unit)}</h5>${tj}</div>
@@ -673,28 +725,28 @@
   /* ---------- Excel ---------- */
   function buildWb() {
     const R = st.result;
-    const wb = XLSX.utils.book_new();
+    const wb = XL.book();
     const plansOn = st.plans.length > 0;
     const head = ['Alaprajzi jel', 'Megnevezés', ...(plansOn ? ['Rajzon (hely)'] : []), 'Konszignáció', 'Tételjegyzék', 'Egység'];
     const rowOf = g => [g.codes.join(', '), g.name, ...(plansOn ? [g.pCount || ''] : []), g.kQty == null ? '' : g.kQty, g.tjQty == null ? '' : g.tjQty, g.unit];
-    const e = [[...head, 'Eltérés', 'Részletek', 'Valószínűség (%)', 'Táblázat sora', 'Konszignáció oldala', 'Tervlapok']];
-    R.groups.forEach(g => g.findings.forEach(f => e.push([...rowOf(g), f.t, f.d, f.p, f.row || (g.rows[0] ? g.rows[0].row : ''), g.konsz.map(k => k.page).join(', '), Object.entries(g.perPlan).map(([k, v]) => `${k}: ${v}`).join('; ')])));
-    R.sheetIssues.forEach(i => e.push(['', '', ...(plansOn ? [''] : []), '', '', '', i.t, i.d, i.p, i.row, '', '']));
-    R.noCode.forEach(r => r.issues.forEach(i => e.push(['', r.text.replace(/\s+/g, ' ').slice(0, 90), ...(plansOn ? [''] : []), '', r.qty == null ? '' : r.qty, r.unit, i.t, i.d, i.p, r.row, '', ''])));
-    const ws1 = XLSX.utils.aoa_to_sheet(e);
-    ws1['!cols'] = [{ wch: 14 }, { wch: 34 }, ...(plansOn ? [{ wch: 10 }] : []), { wch: 12 }, { wch: 12 }, { wch: 7 }, { wch: 28 }, { wch: 80 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 40 }];
-    XLSX.utils.book_append_sheet(wb, ws1, 'Eltérések');
+    // Ugyanaz a sorrend, mint a képernyőn: a legvalószínűbb eltérések elöl.
+    const rows = [];
+    R.groups.forEach(g => g.findings.forEach(f => rows.push([...rowOf(g), f.p, f.t, f.d, f.row || (g.rows[0] ? g.rows[0].row : ''), g.konsz.map(k => k.page).join(', '), Object.entries(g.perPlan).map(([k, v]) => `${k}: ${v}`).join('; ')])));
+    R.sheetIssues.forEach(i => rows.push(['', '', ...(plansOn ? [''] : []), '', '', '', i.p, i.t, i.d, i.row, '', '']));
+    R.noCode.forEach(r => r.issues.forEach(i => rows.push(['', r.text.replace(/\s+/g, ' ').slice(0, 90), ...(plansOn ? [''] : []), '', r.qty == null ? '' : r.qty, r.unit, i.p, i.t, i.d, r.row, '', ''])));
+    const pAt = head.length;
+    rows.sort((a, b) => b[pAt] - a[pAt]);
+    const e = [[...head, 'Valószínűség (%)', 'Eltérés', 'Részletek', 'Táblázat sora', 'Konszignáció oldala', 'Tervlapok'], ...rows];
+    XL.add(wb, XL.sheet(e, [14, 34, ...(plansOn ? [11] : []), 13, 13, 8, 12, 28, 80, 10, 12, 40], { filter: true }), 'Eltérések');
     const all = [[...head, 'Állapot', 'Tervlaponként']];
     R.groups.forEach(g => all.push([...rowOf(g), g.findings.length ? g.findings.map(f => f.t).join('; ') : 'Egyezik', Object.entries(g.perPlan).map(([k, v]) => `${k}: ${v}`).join('; ')]));
-    const ws2 = XLSX.utils.aoa_to_sheet(all);
-    ws2['!cols'] = [{ wch: 14 }, { wch: 34 }, ...(plansOn ? [{ wch: 10 }] : []), { wch: 12 }, { wch: 12 }, { wch: 7 }, { wch: 50 }, { wch: 50 }];
-    XLSX.utils.book_append_sheet(wb, ws2, 'Összes jel');
+    XL.add(wb, XL.sheet(all, [14, 34, ...(plansOn ? [11] : []), 13, 13, 8, 50, 50], { filter: true }), 'Összes jel');
     return wb;
   }
   function exportXlsx() {
     if (!st.result) return;
     const name = (st.sheet ? st.sheet.fileName.replace(/\.[^.]+$/, '') : 'egyezes').slice(0, 60);
-    XLSX.writeFile(buildWb(), `Eltérések - ${name}.xlsx`);
+    XL.save(buildWb(), `Eltérések - ${name}.xlsx`);
   }
 
   /* ---------- események ---------- */
@@ -702,7 +754,7 @@
     const t = e.target.closest('button'); if (!t) return;
     if (t.dataset.egRemove) { e.preventDefault(); remove(t.dataset.egRemove); }
     // Csoportos kártya: mind jóváhagyva / egyik sem hiba. Ugyanaz, mintha soronként kattintana.
-    else if (t.dataset.egRvall) { const y = window.scrollY, v = t.dataset.egRvall, rv = App.state.review; t.dataset.keys.split('§').forEach(k => { rv[k] = v; }); App.render(); window.scrollTo(0, y); if (App.saveSoon) App.saveSoon(); }
+    else if (t.dataset.egRvall) { const y = window.scrollY, v = t.dataset.egRvall, rv = App.state.review; t.dataset.keys.split('§').forEach(k => { if (!rv[k]) rv[k] = v; }); App.render(); window.scrollTo(0, y); if (App.saveSoon) App.saveSoon(); }
     else if (t.dataset.egPlan) openPlan(Number(t.dataset.egPlan));
     else if (t.dataset.egCheck) { const y = window.scrollY, i = t.dataset.egCheck; st.open[i] = !st.open[i]; App.render(); window.scrollTo(0, y); }
     else if (t.dataset.egHit) {
@@ -780,7 +832,7 @@
   function appendSheets(wb) {
     if (!st.result) return;
     const w = buildWb();
-    w.SheetNames.forEach((n, i) => XLSX.utils.book_append_sheet(wb, w.Sheets[n], i === 0 ? 'Egyezés - eltérések' : 'Egyezés - összes jel'));
+    w.SheetNames.forEach((n, i) => XL.add(wb, w.Sheets[n], i === 0 ? 'Egyezés - eltérések' : 'Egyezés - összes jel'));
   }
 
   // A táblázat egy sorához tartozó konszignációs lap(ok) szövege: a modell ebből látja a méretet és az anyagot.
@@ -790,5 +842,5 @@
     if (!g || !g.konsz.length) return '';
     return g.konsz.map(k => `[${g.codes.join(', ')} konszignáció, ${k.page}. oldal] ${k.text.split(NL).map(l => l.trim()).filter(Boolean).join(' · ')}`).join(' | ').slice(0, 1500);
   }
-  root.Egyezes = { get state() { return st; }, sheetFindings, addFiles: take, trySheet, ready, reset, view, dropHtml, readSheet, compare, expandCodes, dimsOf, questions, letter, flagsForRow, missingGroups, appendSheets, projectName, konszTextForRow, codesForRow };
+  root.Egyezes = { get state() { return st; }, sheetFindings, sharpCount: () => Object.keys(sharp).length, addFiles: take, trySheet, ready, reset, view, dropHtml, readSheet, compare, expandCodes, dimsOf, questions, letter, flagsForRow, missingGroups, appendSheets, projectName, konszTextForRow, codesForRow };
 })(window);

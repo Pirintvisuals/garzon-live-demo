@@ -37,9 +37,15 @@ module.exports = async (req, res) => {
     const list = b.problems || [];
     if (!list.length || list.length > 120) return res.status(400).json({ error: 'Egy kérésben 1 és 120 közötti probléma küldhető.' });
     const cut = (x, n) => String(x || '').slice(0, n);
-    const cimzett = b.cimzett === 'gk'
-      ? 'A címzett a generálkivitelező: a kérdések az árazás előtti tisztázást szolgálják (a rajz, a konszignáció és a tételjegyzék eltérései, hiányzó adatok).'
-      : 'A címzett az ajánlatkérő: a kérdések kiegészítő tájékoztatás-kérésként mennek ki egy közbeszerzési eljárásban.';
+    const INTERN = 'BELSŐ ÜZENET egy kollégának, magyarul. A hangnem itt nem hivatalos: rövid, tegező, tárgyszerű kérések ("Nézd meg, …", "Kérlek, add meg …"). A többi szabály ugyanúgy érvényes.';
+    const cimzett = {
+      gk: 'A címzett a generálkivitelező: a kérdések az árazás előtti tisztázást szolgálják (a rajz, a konszignáció és a tételjegyzék eltérései, hiányzó adatok).',
+      tervezo: 'A címzett a tervező: a kérdések a tervekre, méretekre, a konszignációra és a műszaki tartalomra vonatkoznak, árazás előtti tisztázásként.',
+      beszerzes: 'A címzett a saját cég beszerzési kollégája. ' + INTERN + ' A kérések beszállítói árra, típusra, szállítási időre vonatkoznak.',
+      uzem: 'A címzett a saját cég gyártási (üzemi) kollégája. ' + INTERN + ' A kérések gyárthatóságra, anyagra, munkaidőre vonatkoznak.'
+    }[b.cimzett] || 'A címzett az ajánlatkérő: a kérdések kiegészítő tájékoztatás-kérésként mennek ki egy közbeszerzési eljárásban.';
+    // A belső üzenet mindig magyar.
+    if (b.cimzett === 'beszerzes' || b.cimzett === 'uzem') b.nyelv = 'hu';
     const NYELV = { de: 'németül (Deutsch), hivatalos üzleti német megfogalmazásban', ro: 'románul (română), hivatalos üzleti román megfogalmazásban' }[b.nyelv];
     const nyelv = NYELV ? `\nA KÉRDÉSEKET ${NYELV.toUpperCase()} ÍRJA (a fenti szabályok ugyanúgy érvényesek; a tételszámok, jelek és idézett méretek változatlanok).` : '';
     const user = `${cimzett}${nyelv}\nPROJEKT: ${cut(b.projekt, 200)}\n\nJÓVÁHAGYOTT PROBLÉMÁK:\n\n` +

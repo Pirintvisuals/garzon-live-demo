@@ -1,10 +1,10 @@
 /*
  * Excel munkafüzet: az árajánlatadó ebben folytatja a munkát. Az ároszlopok üresek, a nettó érték képlet.
+ * A formázást (fejléc, szegély, tördelés, szűrő, forint) az xlstyle.js adja.
  */
 (function () {
   const { MAKERS } = App;
   const H = App.helpers;
-  const sheet = (aoa, widths) => { const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = widths.map(w => ({ wch: w })); return ws; };
 
   function itemRows(list, startRow) {
     return list.map((it, n) => {
@@ -16,32 +16,40 @@
     });
   }
   const ITEM_HEAD = ['Tétel', 'Rész', 'Megnevezés', 'Eredeti leírás', 'Kategória', 'Szélesség (mm)', 'Mélység (mm)', 'Magasság (mm)', 'Anyag', 'Váz', 'Szín', 'Gyártás', 'Mennyiség', 'Egység', 'Nettó egységár (Ft)', 'Nettó érték (Ft)', 'Észrevétel', 'Forrás'];
-  const ITEM_W = [8, 20, 26, 60, 12, 10, 10, 10, 34, 26, 14, 18, 10, 7, 16, 16, 50, 24];
+  const ITEM_W = [8, 20, 30, 60, 14, 11, 11, 11, 34, 26, 16, 18, 10, 8, 16, 16, 50, 22];
+  const itemSheet = list => XL.sheet([ITEM_HEAD, ...itemRows(list, 2)], ITEM_W, { money: [14, 15], filter: true });
 
   function build() {
-    const st = App.state, t = st.tender, wb = XLSX.utils.book_new();
+    const st = App.state, t = st.tender, wb = XL.book();
     const all = H.items();
     if (t) {
-      const o = t.osszefoglalo;
-      XLSX.utils.book_append_sheet(wb, sheet([
-        ['Vezetői összefoglaló'], [], ['Tárgy', o.targy], ['Ajánlatkérő', o.ajanlatkero], ['Eljárás', o.eljaras || ''], ['Leírás', o.rovid_leiras], [],
-        ['Feltétel', 'Érték', 'Idézet a dokumentumból'], ...o.feltetelek.map(f => [f.nev, f.ertek, f.idezet]), [],
-        ['Kockázat', 'Leírás', 'Súlyosság', 'Idézet'], ...o.kockazatok.map(k => [k.cim, k.leiras, H.SEV[k.sulyossag].label, k.idezet]), [],
-        ['Csatolandó dokumentumok'], ...o.csatolando.map(x => [x])
-      ], [34, 70, 70, 60]), 'Összefoglaló');
+      // Az összefoglaló több kis táblázatból áll: a fejlécsorok helyét építés közben jegyezzük fel.
+      const o = t.osszefoglalo, a = [], head = [], label = [];
+      a.push(['Vezetői összefoglaló']); a.push([]);
+      [['Tárgy', o.targy], ['Ajánlatkérő', o.ajanlatkero], ['Eljárás', o.eljaras || ''], ['Leírás', o.rovid_leiras]].forEach(r => { label.push(a.length); a.push(r); });
+      a.push([]);
+      head.push(a.length); a.push(['Feltétel', 'Érték', 'Idézet a dokumentumból']); o.feltetelek.forEach(f => a.push([f.nev, f.ertek, f.idezet])); a.push([]);
+      head.push(a.length); a.push(['Kockázat', 'Leírás', 'Súlyosság', 'Idézet']); o.kockazatok.forEach(k => a.push([k.cim, k.leiras, H.SEV[k.sulyossag].label, k.idezet])); a.push([]);
+      head.push(a.length); a.push(['Csatolandó dokumentumok']); o.csatolando.forEach(x => a.push([x]));
+      XL.add(wb, XL.sheet(a, [34, 70, 60, 60], { title: [0], head, label }), 'Összefoglaló');
     }
-    XLSX.utils.book_append_sheet(wb, sheet([ITEM_HEAD, ...itemRows(all, 2)], ITEM_W), 'Tételek');
-    [['fa', 'Faüzem', m => m === 'fa' || m === 'fa_fem'], ['fem', 'Fémüzem', m => m === 'fem' || m === 'fa_fem'], ['karpit', 'Kárpitos', m => m === 'karpit'], ['beszallitoi', 'Beszállítói', m => m === 'beszallitoi']]
-      .forEach(([, name, test]) => {
+    XL.add(wb, itemSheet(all), 'Tételek');
+    [['Faüzem', m => m === 'fa' || m === 'fa_fem'], ['Fémüzem', m => m === 'fem' || m === 'fa_fem'], ['Kárpitos', m => m === 'karpit'], ['Beszállítói', m => m === 'beszallitoi']]
+      .forEach(([name, test]) => {
         const list = all.filter(i => test(H.makerOf(i)));
-        if (list.length) XLSX.utils.book_append_sheet(wb, sheet([ITEM_HEAD, ...itemRows(list, 2)], ITEM_W), name);
+        if (list.length) XL.add(wb, itemSheet(list), name);
       });
     const checks = [['Típus', 'Súlyosság', 'Megállapítás', 'Leírás', 'Idézet', 'Érintett tételek']];
     if (t) t.ellenorzes.forEach(f => checks.push([H.FIND_TYPES[f.tipus] || '', H.SEV[f.sulyossag].label, f.cim, f.leiras, f.idezet, f.erintett_tetelek.join(', ')]));
     all.forEach(it => H.notesOf(it).forEach(n => checks.push([H.NOTE_TYPES[n.tipus] || '', '', it.name, n.szoveg, n.idezet, it.id])));
-    XLSX.utils.book_append_sheet(wb, sheet(checks, [32, 11, 40, 70, 60, 20]), 'Ellenőrizendő');
+    XL.add(wb, XL.sheet(checks, [30, 12, 40, 70, 60, 18], { filter: true }), 'Ellenőrizendő');
     // Kérdések: a jóváhagyott hibákból megírt levél kérdései (ha már elkészült).
-    if (st.letter && st.letter.qs.length) XLSX.utils.book_append_sheet(wb, sheet([['#', 'Kérdés'], ...st.letter.qs.map((q, n) => [n + 1, q])], [4, 120]), 'Kérdések');
+    // Címzettenként: ki kapja, és mit.
+    if (st.letter && st.letter.qs.length) {
+      const R = H.recipients(), rows = [];
+      st.letter.parts.forEach(p => p.qs.forEach((q, n) => rows.push([(R[p.r] || R.kulso).label, n + 1, q])));
+      XL.add(wb, XL.sheet([['Címzett', '#', 'Kérdés'], ...rows], [22, 5, 110], { filter: true }), 'Kérdések');
+    }
     if (st.rev && st.rev.changes.length) {
       const KIND = { changed: 'Módosult', added: 'Új tétel', removed: 'Törölt tétel' };
       const rows = st.rev.changes.map(c => {
@@ -49,13 +57,16 @@
         return [c.id, c.part, (c.old || c.new).name, KIND[c.kind], a.mi_valtozott || '', a.arat_erinti ? H.IMPACT[a.arat_erinti].label : '',
           o.qty != null ? o.qty : '', n.qty != null ? n.qty : '', o.spec || '', n.spec || '', c.kind === 'changed' ? H.earlierFlags(c.id).join(' | ') : ''];
       });
-      XLSX.utils.book_append_sheet(wb, sheet([['Tétel', 'Rész', 'Megnevezés', 'Változás', 'Mi változott', 'Árhatás', 'Régi menny.', 'Új menny.', 'Régi leírás', 'Új leírás', 'A program az eredetinél jelezte'], ...rows],
-        [8, 20, 26, 12, 50, 16, 10, 10, 60, 60, 50]), 'Revízió');
+      XL.add(wb, XL.sheet([['Tétel', 'Rész', 'Megnevezés', 'Változás', 'Mi változott', 'Árhatás', 'Régi menny.', 'Új menny.', 'Régi leírás', 'Új leírás', 'A program az eredetinél jelezte'], ...rows],
+        [8, 20, 26, 12, 50, 16, 10, 10, 60, 60, 50], { filter: true }), 'Revízió');
     }
     if (window.Egyezes && Egyezes.ready()) Egyezes.appendSheets(wb);
     const td = H.todoList();
-    XLSX.utils.book_append_sheet(wb, sheet([['Kész', 'Teendő', 'Megjegyzés'], ...td.work.map(t => [st.todo[t.id] ? 'x' : '', t.text, t.hint || '']), [], ['Kész', 'Csatolandó dokumentum'], ...td.docs.map(t => [st.todo[t.id] ? 'x' : '', t.text])], [6, 70, 70]), 'Teendők');
-    XLSX.writeFile(wb, 'ajanlatkeres_elokeszites.xlsx');
+    const ta = [['Kész', 'Teendő', 'Megjegyzés'], ...td.work.map(x => [st.todo[x.id] ? 'x' : '', x.text, x.hint || '']), []];
+    const docHead = ta.length;
+    ta.push(['Kész', 'Csatolandó dokumentum'], ...td.docs.map(x => [st.todo[x.id] ? 'x' : '', x.text]));
+    XL.add(wb, XL.sheet(ta, [6, 70, 70], { head: [0, docHead] }), 'Teendők');
+    XL.save(wb, 'ajanlatkeres_elokeszites.xlsx');
   }
   document.getElementById('btn-xlsx').addEventListener('click', build);
 })();

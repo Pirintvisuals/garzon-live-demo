@@ -97,7 +97,7 @@ module.exports = async (req, res) => {
     const list = items.map(i => `[${i.id}] ${i.part} | ${i.name} | ${i.qty} ${i.unit} | ${i.spec}`).join('\n');
     const user = (doc
       ? 'AJÁNLATKÉRÉSI DOKUMENTUM (' + (docName || 'dokumentum') + '):\n"""\n' + doc + '\n"""\n\n'
-      : 'Szöveges dokumentum nem érkezett, csak a tételjegyzék. Az összefoglalót és az ellenőrzést a tételjegyzék alapján készítse, az idézetek a tételek leírásából származzanak.\n\n') +
+      : 'Szöveges dokumentum nem érkezett, csak a tételjegyzék. Az összefoglalót és az ellenőrzést a tételjegyzék alapján készítse, az idézetek a tételek leírásából származzanak. A dokumentum hiányát ne vegye fel sem kockázatként, sem feltételként (azt a program maga jelzi); csak olyan kockázatot írjon, amelyet egy tétel szövege valóban alátámaszt.\n\n') +
       'TÉTELJEGYZÉK (soronként: [id] rész | megnevezés | mennyiség | leírás):\n' + list;
     const out = await gemini({ system: SYSTEM, user, schema: SCHEMA, maxOutputTokens: 40000, tier: 'strong' });
     res.status(200).json({ ...out.data, model: out.model, usage: out.usage });

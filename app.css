@@ -252,3 +252,19 @@ td.mk-sel .btn { margin-left: 6px; }
 .egc-grp table.eg-t td { vertical-align: middle; }
 .egc-grp tr.eg-detail > td { background: var(--accent-soft); padding: 12px; }
 .egc-grp tr.rv-no > td { opacity: .45; }
+/* Egyezés: nagyobb, éles rajzi kivágások (a jel felirata olvasható a karikában) */
+.eg-crop canvas { width: 198px; height: 132px; }
+.eg-crop span { max-width: 198px; font-size: 11px; }
+/* Hibák: sávonkénti gyors döntés */
+h4.sec.band-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+h4.sec.band-h .band-act { margin-left: auto; display: inline-flex; gap: 6px; text-transform: none; letter-spacing: 0; }
+
+/* Kérdések: címzettek */
+.route .card-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.route-bulk { display: flex; gap: 14px; flex-wrap: wrap; margin: 0 0 10px; }
+.route-sel { font: inherit; font-size: 12.5px; padding: 3px 6px; border: 1px solid var(--border-strong); border-radius: 5px; background: var(--surface); }
+.route-sel.r-tervezo, .route-tag.r-tervezo { border-color: #9cc3e6; background: #eef6fd; }
+.route-sel.r-beszerzes, .route-tag.r-beszerzes { border-color: #c9b6e4; background: #f5f0fb; }
+.route-sel.r-uzem, .route-tag.r-uzem { border-color: #a9d3b8; background: #eef8f1; }
+.route-tag { display: inline-block; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; color: var(--text); padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface-2); }
+h4.sec.q-to { display: flex; align-items: center; gap: 10px; text-transform: none; letter-spacing: 0; font-size: 13px; }
