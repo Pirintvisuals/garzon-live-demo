@@ -1355,7 +1355,7 @@ im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`
       if (m && m.a && !m.added) { st.manual.push({ id: Date.now().toString(36), item: '', text: cleanQ(m.a.kerdes_az_ajanlatkeronek) }); m.added = true; render(); }
     }
     // A besorolás jó: biztosra vált, de a program indoklása megmarad.
-    else if (t.dataset.makerOk) { const a = st.ai[t.dataset.makerOk]; if (a) { a.gyarto_ok = true; const y = window.scrollY; render(); window.scrollTo(0, y); } }
+    else if (t.dataset.makerOk) { const a = st.ai[t.dataset.makerOk]; if (a) { a.gyarto_ok = true; const y = window.scrollY; render(); window.scrollTo(0, y); saveJobSoon(); } }
     else if (t.dataset.openSheet !== undefined) { e.preventDefault(); openSheet(t.dataset.openSheet, t.dataset.row); }
     else if (t.dataset.openDoc !== undefined) { e.preventDefault(); openDoc(t.dataset.openDoc, t.dataset.page); }
     else if (t.dataset.pcalc) { const y = window.scrollY; st.pricing.open[t.dataset.pcalc] = !st.pricing.open[t.dataset.pcalc]; render(); window.scrollTo(0, y); }
@@ -1385,7 +1385,7 @@ im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`
   document.addEventListener('change', e => {
     const t = e.target;
     if (t.type === 'file' && t.files[0]) { const k = t.closest('.drop').dataset.kind; if (k === 'all') loadAll([...t.files]); else if (k === 'egyezes') Egyezes.addFiles([...t.files]); else if (k === 'rev') setRevision(t.files[0]); else { if (k === 'sheet') st.sample = ''; setFile(k, k === 'doc' ? [...t.files] : t.files[0]); } }
-    else if (t.dataset.maker) { st.ai[t.dataset.maker].gyarto = t.value; st.ai[t.dataset.maker].gyarto_indok = 'Kézzel átállítva.'; const y = window.scrollY; render(); window.scrollTo(0, y); }
+    else if (t.dataset.maker) { st.ai[t.dataset.maker].gyarto = t.value; st.ai[t.dataset.maker].gyarto_indok = 'Kézzel átállítva.'; const y = window.scrollY; render(); window.scrollTo(0, y); saveJobSoon(); }
     else if (t.id === 'q-lang') { st.lang = t.value; st.letter = st.letters[st.lang] || null; render(); saveJobSoon(); }
     else if (t.id === 'f-part') { st.filter.part = t.value; render(); }
     else if (t.id === 'f-maker') { st.filter.maker = t.value; render(); }
