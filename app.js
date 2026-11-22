@@ -196,7 +196,8 @@
     const ins = gk
       ? `<div class="fl-in ${f.sheet ? 'ok' : ''}"><b>Tételjegyzék (Excel)</b><span>a generálkivitelező táblázata, alaprajzi jelekkel</span></div>
         <div class="fl-in ${E.konsz.length ? 'ok' : ''}"><b>Konszignáció (PDF)</b><span>bútor- és asztalos lapok: méret, anyag, darab</span></div>
-        <div class="fl-in ${E.plans.length ? 'ok' : ''}"><b>Tervlapok (PDF)</b><span>alaprajzok a jelekkel</span></div>`
+        <div class="fl-in ${E.plans.length ? 'ok' : ''}"><b>Tervlapok (PDF)</b><span>alaprajzok a jelekkel</span></div>
+        <div class="fl-in ${f.doc ? 'ok' : ''}"><b>Szerződés, feltételek</b><span>nem kötelező: alvállalkozói szerződés, műszaki leírás</span></div>`
       : `<div class="fl-in ${f.sheet ? 'ok' : ''}"><b>Tételjegyzék (Excel)</b><span>mit kér, hány darabot; az árak üresek</span></div>
         <div class="fl-in ${f.doc ? 'ok' : ''}"><b>Feltételek (PDF, Word)</b><span>határidő, fizetés, kötbér, jótállás</span></div>`;
     const outs = gk
@@ -227,8 +228,8 @@
         ${st.detecting ? '<div class="drop-s"><span class="spin"></span> A táblázat szerkezetének felismerése…</div>' : ''}
         ${st.book ? `<div class="drop-s">${st.book.sheetCount} munkalap, ebből ${c.parts} tartalmaz tételeket · ${c.items} tétel · ${esc(qtyText(items()))}</div>${st.book.usedAi ? colInfo() : ''}` : ''}</label>
       <label class="drop ${f.doc ? 'has' : ''}" data-kind="doc"><input type="file" accept=".pdf,.docx,.txt" multiple hidden>
-        <div class="drop-t">2. Feltételek (PDF vagy Word)</div>
-        <div class="drop-h">A kiírás, a műszaki leírás, a szerződéstervezet: határidő, fizetés, kötbér, jótállás. Nem kötelező, de ebből lesz a vezetői összefoglaló.</div>
+        <div class="drop-t">2. ${mode === 'gk' ? 'Szerződés, feltételek (PDF vagy Word) <span class="muted" style="font-weight:400">· nem kötelező</span>' : 'Feltételek (PDF vagy Word)'}</div>
+        <div class="drop-h">${mode === 'gk' ? 'A generálkivitelező alvállalkozói szerződése vagy szerződéstervezete, műszaki leírása: határidő, fizetés, kötbér, jótállás, visszatartás. Ha van, ebből lesz a vezetői összefoglaló és a kockázatok.' : 'A kiírás, a műszaki leírás, a szerződéstervezet: határidő, fizetés, kötbér, jótállás. Nem kötelező, de ebből lesz a vezetői összefoglaló.'}</div>
         <div class="drop-f">${st.docs.length ? st.docs.map(d => `<div>${esc(d.fileName)} <button class="opn" data-open-doc="${esc(d.fileName)}" title="A dokumentum megnyitása">Megnyitás</button>${st.running ? '' : ` <button class="rm" data-remove="doc" data-name="${esc(d.fileName)}" title="Fájl eltávolítása">Eltávolítás</button>`}</div>`).join('') : 'Húzza ide, vagy kattintson (.pdf, .docx), több fájl is lehet'}</div>
         ${st.reading ? `<div class="drop-s"><span class="spin"></span> ${esc(st.reading)}</div>` : ''}
         ${st.doc ? `<div class="drop-s">${st.docs.length} dokumentum · ${st.docIndex.paras.length.toLocaleString('hu-HU')} bekezdés${st.docs.some(d => d.scanned) ? ' · szkennelt PDF szövegfelismeréssel' : ''}</div>${st.docs.filter(d => d.failedPages && d.failedPages.length).map(d => `<div class="drop-i">${esc(d.fileName)}: ${d.failedPages.length} oldal nem volt olvasható (${d.failedPages.join(', ')}. oldal).</div>`).join('')}` : ''}</label>
