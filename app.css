@@ -268,3 +268,7 @@ h4.sec.band-h .band-act { margin-left: auto; display: inline-flex; gap: 6px; tex
 .route-sel.r-uzem, .route-tag.r-uzem { border-color: #a9d3b8; background: #eef8f1; }
 .route-tag { display: inline-block; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; color: var(--text); padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface-2); }
 h4.sec.q-to { display: flex; align-items: center; gap: 10px; text-transform: none; letter-spacing: 0; font-size: 13px; }
+/* Hibák: kártyák az Egyezés mintájára */
+.egc .quote { margin: 0 0 8px; }
+.egc .whynot { margin: 4px 0 6px; font-size: 13px; color: var(--muted); }
+h4.sec.eg-band.band-h .band-act { margin-left: auto; }

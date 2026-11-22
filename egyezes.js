@@ -223,6 +223,30 @@
       }
     }
     const uniq = hits.filter((h, i) => !hits.slice(0, i).some(o => o.code === h.code && o.page === h.page && Math.abs(o.x - h.x) < 3 && Math.abs(o.y - h.y) < 3));
+    // Jelmagyarázat vagy lista a tervlapon: legalább 5 különböző jel egy oszlopban, sorközzel egymás alatt (például „BEB-01 … BEB-05, MOB-01, MOB-02”).
+    // Ez nem elhelyezett bútor, ezért nem számoljuk darabnak; különben minden ilyen jel eggyel többnek látszana a rajzon.
+    const legend = new Set();
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const ph = uniq.filter(h => h.page === p).map(h => ({ h, cx: h.x + h.w / 2, cy: h.y + h.h / 2 })).sort((a, b) => a.cx - b.cx);
+      const cols = [];
+      ph.forEach(o => { const c = cols.find(c => Math.abs(c.cx - o.cx) < 8); if (c) { c.items.push(o); } else cols.push({ cx: o.cx, items: [o] }); });
+      for (const c of cols) {
+        const it = c.items.sort((a, b) => a.cy - b.cy);
+        // egymást követő, szorosan (legfeljebb 2,5 sornyira) egymás alatt álló jelek láncai
+        let run = [it[0]];
+        const flush = () => {
+          const codes = new Set(run.map(o => o.h.code));
+          if (run.length >= 5 && codes.size === run.length) run.forEach(o => legend.add(o.h));
+        };
+        for (let k = 1; k < it.length; k++) {
+          const fs = it[k].h.fs || it[k].h.h || 8;
+          if (it[k].cy - it[k - 1].cy <= fs * 2.5) run.push(it[k]); else { flush(); run = [it[k]]; }
+        }
+        flush();
+      }
+    }
+    const legendHits = uniq.filter(h => legend.has(h));
+    if (legendHits.length) { for (let k = uniq.length - 1; k >= 0; k--) if (legend.has(uniq[k])) uniq.splice(k, 1); }
     // A helyiséglista táblázata (egy oszlopban sok helyiségszám) nem a rajz része: kihagyjuk.
     const col = {};
     stamps.forEach(st2 => { const k = st2.page + ':' + Math.round(st2.x / 12); col[k] = (col[k] || 0) + 1; });
@@ -238,7 +262,7 @@
       const W = pages[h.page - 1].w;
       h.room = best && Math.sqrt(bd) < W * 0.12 ? best.room : '';
     });
-    return { kind: 'plan', fileName: file.name, label: planLabel(file.name), pages, hits: uniq, rooms: [...new Set(planStamps.map(x => x.room))] };
+    return { kind: 'plan', fileName: file.name, label: planLabel(file.name), pages, hits: uniq, legend: legendHits.map(h => ({ code: h.code, page: h.page })), rooms: [...new Set(planStamps.map(x => x.room))] };
   }
   function planLabel(name) {
     const n = name.replace(/\.pdf$/i, '');
@@ -571,7 +595,10 @@
     const src = [st.sheet ? 'tételjegyzék' : '', st.konsz.length ? 'konszignáció' : '', st.plans.length ? st.plans.length + ' tervlap' : ''].filter(Boolean).join(', ');
     const sf = sheetFindings();
     const planCols = st.plans.length;
-    let h = `<div class="view-head"><div><h2>Egyezés: rajz, konszignáció, tételjegyzék</h2><p>${gs.length} alaprajzi jelet vetettünk össze (${esc(src)}). A darabszámokat a program a fájlokból számolja, nem becsli.</p></div>
+    // Csak az itt összevetett jelek magyarázata érdekes (a burkolat-, ajtó- stb. jelek eddig sem számítottak).
+    const known = new Set(gs.flatMap(g => g.codes));
+    const leg = st.plans.flatMap(p => (p.legend || []).filter(l => known.has(l.code)).map(l => ({ ...l, label: p.label })));
+    let h = `<div class="view-head"><div><h2>Egyezés: rajz, konszignáció, tételjegyzék</h2><p>${gs.length} alaprajzi jelet vetettünk össze (${esc(src)}). A darabszámokat a program a fájlokból számolja, nem becsli.${leg.length ? ` A tervlapon talált jelmagyarázatot (${leg.length} jel: ${esc([...new Set(leg.map(l => l.code))].slice(0, 8).join(', '))}${leg.length > 8 ? '…' : ''}, ${esc([...new Set(leg.map(l => l.label))].join(', '))}) nem számolja darabnak.` : ''}</p></div>
       <div><button class="btn btn-primary" id="eg-xlsx">Eltérések letöltése (Excel)</button></div></div>`;
     h += `<div class="kpis">
       <div class="kpi"><div class="l">Összevetett jel</div><div class="v">${gs.length}</div><div class="s">${okG.length} egyezik, ${withF.length} jelnél van eltérés</div></div>
@@ -591,7 +618,7 @@
     });
     // Azonos százaléknál a csoportos kártya a végére kerül: elöl az egyedi, konkrét eltérések.
     units.sort((a, b) => b.p - a.p || (a.grp - b.grp) || a.code.localeCompare(b.code, 'hu', { numeric: true }));
-    h += `<p class="eg-how">Felül a legvalószínűbb eltérések, lefelé csökkenő sorrendben. A „Források” gomb egymás mellett mutatja a táblázat sorát, a konszignációs lapot és a rajzot.</p>`;
+    h += `<p class="eg-how">Felül a legvalószínűbb eltérések, lefelé csökkenő sorrendben. A „Források” gomb egymás mellett mutatja a táblázat sorát, a konszignációs lapot és a rajzot.${leg.length ? ` A tervlapon talált jelmagyarázatot (${[...new Set(leg.map(l => l.code))].length} jel: ${esc([...new Set(leg.map(l => l.code))].slice(0, 8).join(', '))}, ${esc([...new Set(leg.map(l => l.label))].join(', '))}) nem számolja darabnak, mert az nem elhelyezett bútor.` : ''}</p>`;
     let lastD = null;
     units.forEach(u => {
       const d = dOf(u.p);

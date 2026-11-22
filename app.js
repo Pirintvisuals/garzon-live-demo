@@ -668,6 +668,7 @@
     { min: 0, label: 'Érdemes megnézni', cls: 'pb-lo', note: '50% alatt: lehet szándékos vagy szokásos megfogalmazás' }
   ];
   const pband = p => PBANDS.find(b => p >= b.min);
+  const PB_CLS = d => (d >= 80 ? 'pb-hi' : d >= 50 ? 'pb-mid' : 'pb-lo');
   // Az összes találat egy listában: a tételek hibái (azonos szövegűek összevonva) és a dokumentum-összevetés megállapításai.
   function allFindings() {
     const groups = new Map();
@@ -692,20 +693,36 @@
   }
   const rvCls = k => (st.review[k] === 'ok' ? ' rv-ok' : st.review[k] === 'no' ? ' rv-no' : '');
   root.App.rvBtns = rvBtns; root.App.rvCls = rvCls;
-  function findingHtml(x) {
+  // Egy felvetés kártyája, az Egyezés mintájára: elöl a százalék és mi a baj, alatta melyik tétel, a leírás és a forrás.
+  const bandHeadP = d => (d >= 90 ? '90–100%' : d >= 40 ? `${d}–${d + 9}%` : '40% alatt');
+  const bandLabelP = d => (d >= 90 ? 'szinte biztos hiba' : d >= 80 ? 'nagyon valószínű' : d >= 70 ? 'valószínű' : d >= 60 ? 'érdemes megnézni' : d >= 50 ? 'ellenőrizendő' : d >= 40 ? 'kevésbé valószínű' : 'valószínűleg nem hiba, de jelezzük');
+  const decOf = p => Math.max(30, Math.floor(p / 10) * 10);
+  function findingHtml(x, others) {
     const bd = pband(x.p);
     const why = (x.n || x.f).pont_indok;
-    const pb = `<span class="pbadge ${bd.cls}" title="${esc(why ? 'Miért ennyi: ' + why : 'Mennyire valószínű, hogy tényleg hiba')}">${x.p}% valószínű</span>`;
+    const pb = `<span class="pbadge ${bd.cls}" title="${esc(why ? 'Miért ennyi: ' + why : 'Mennyire valószínű, hogy tényleg hiba')}">${x.p}%</span>`;
+    const more = others && others.length ? `<div class="egc-act"><span class="muted small">Ennél a tételnél még: ${others.map(o => `${esc(o.t)} (${o.p}%)`).join(', ')}</span></div>` : '';
     if (x.kind === 'item') {
-      const first = x.its[0];
-      const title = x.its.length > 1 ? `${x.its.length} tétel: ${x.its.map(i => esc(shortName(i.name))).join(', ')}` : `${esc(shortName(first.name))} <span class="muted" style="font-weight:400">· ${fmt(first.qty)} ${esc(first.unit)}</span>`;
-      return `<div class="flag ${bd.cls}${rvCls(x.key)}"><div class="flag-h">${pb}<span class="flag-id">${x.its.map(i => esc(i.id)).join(', ')}</span><span class="flag-type">${NOTE_TYPES[x.n.tipus] || ''}</span><span class="flag-title">${title}</span>${rvBtns(x.key)}</div>
-        <div class="flag-b one"><div><p>${esc(x.n.szoveg)}</p>${whyNot(x.n.ha_megsem_hiba, x.p)}${quoteSrc(x.n.idezet, 'tetelegyzek', x.its.map(i => i.id))}</div></div></div>`;
+      const its = x.its;
+      const who = its.length > 1
+        ? `<span class="egc-code">${its.map(i => esc(i.id)).join(', ')}</span><span class="muted"> · ${its.length} tétel: ${its.map(i => esc(shortName(i.name, 40))).join(', ')}</span>`
+        : `<span class="egc-code">${esc(its[0].id)}</span><span class="muted"> · ${esc(shortName(its[0].name, 90))} · ${fmt(its[0].qty)} ${esc(its[0].unit)}</span>`;
+      return `<div class="egc ${bd.cls}${rvCls(x.key)}">
+        <div class="egc-h">${pb}<b class="egc-t">${esc(NOTE_TYPES[x.n.tipus] || 'Észrevétel')}</b>${rvBtns(x.key)}</div>
+        <div class="egc-who">${who}</div>
+        <p class="egc-d">${esc(x.n.szoveg)}</p>
+        ${quoteSrc(x.n.idezet, 'tetelegyzek', its.map(i => i.id))}${whyNot(x.n.ha_megsem_hiba, x.p)}${more}</div>`;
     }
     const f = x.f;
-    return `<div class="flag ${bd.cls}${rvCls(x.key)}"><div class="flag-h">${pb}<span class="flag-id">E-${String(x.i + 1).padStart(2, '0')}</span><span class="flag-type">${FIND_TYPES[f.tipus] || ''}</span><span class="flag-title">${esc(f.cim)}</span>${rvBtns(x.key)}</div>
-      <div class="flag-b one"><div><p>${esc(f.leiras)}</p>${whyNot(f.ha_megsem_hiba, x.p)}${quoteSrc(f.idezet, f.forras, f.erintett_tetelek)}
-      ${f.erintett_tetelek.length ? `<p class="muted small">Érintett tételek: ${f.erintett_tetelek.map(id => { const it = itemById(id); return it ? `<span class="badge grey" title="${esc(it.name)}">${esc(id)} ${esc(it.name)}</span>` : ''; }).join(' ')}</p>` : ''}</div></div></div>`;
+    const rel = f.erintett_tetelek.map(itemById).filter(Boolean);
+    const who = rel.length
+      ? `<span class="egc-code">${rel.map(i => esc(i.id)).join(', ')}</span><span class="muted"> · ${rel.length > 1 ? rel.length + ' tétel: ' + rel.map(i => esc(shortName(i.name, 40))).join(', ') : esc(shortName(rel[0].name, 90))}</span>`
+      : `<span class="egc-code">E-${String(x.i + 1).padStart(2, '0')}</span><span class="muted"> · ${esc(FIND_TYPES[f.tipus] || 'A kiírás egésze')}</span>`;
+    return `<div class="egc ${bd.cls}${rvCls(x.key)}">
+      <div class="egc-h">${pb}<b class="egc-t">${esc(f.cim)}</b>${rvBtns(x.key)}</div>
+      <div class="egc-who">${who}</div>
+      <p class="egc-d">${esc(f.leiras)}</p>
+      ${quoteSrc(f.idezet, f.forras, f.erintett_tetelek)}${whyNot(f.ha_megsem_hiba, x.p)}${more}</div>`;
   }
   // Saját észrevétel: amit a program nem talált meg. Automatikusan a jóváhagyottak közé kerül.
   function manualHtml() {
@@ -723,14 +740,19 @@
     let h = `<div class="view-head"><div><h2>Hibák a kiírásban</h2><p>Minden, ami lehet, hogy hibás, valószínűség szerint rendezve. Hagyja jóvá, ami valóban tisztázandó: a kérdések ezekből készülnek.</p></div>
       <div class="rv-sum"><span class="badge ok">${nOk} jóváhagyva</span> <span class="badge grey">${nNo} nem hiba</span> <button class="btn btn-sm" data-tab="kerdesek">Kérdések →</button></div></div>`;
     h += `<div class="pbands">${PBANDS.map(bd => `<span class="pbadge ${bd.cls}">${bd.label}: ${all.filter(x => pband(x.p) === bd).length}</span>`).join('')}${miss.length ? `<span class="pbadge pb-lo">Hiányzó adat: ${miss.length} (külön, lent)</span>` : ''}<span class="muted small">A program minden lehetséges hibát felvet, és megbecsüli, mennyire valószínű, hogy tényleg hiba. A „Forrás” gombbal ellenőrizhető.</span></div>`;
-    for (const bd of PBANDS) {
-      const list = all.filter(x => pband(x.p) === bd);
-      if (!list.length) continue;
+    // Melyik tételnél van még más felvetés: a kártya alján utalunk rá (a lista minden felvetést csak egyszer mutat).
+    const tLabel = x => (x.kind === 'item' ? (NOTE_TYPES[x.n.tipus] || 'Észrevétel') : x.f.cim);
+    const byItem = {};
+    all.forEach(x => (x.kind === 'item' ? x.its.map(i => i.id) : x.f.erintett_tetelek).forEach(id => (byItem[id] = byItem[id] || []).push(x)));
+    const othersOf = x => { const ids = x.kind === 'item' ? x.its.map(i => i.id) : x.f.erintett_tetelek; if (ids.length !== 1) return []; return (byItem[ids[0]] || []).filter(o => o !== x).map(o => ({ t: tLabel(o), p: o.p })); };
+    // Tízesével, csökkenő sorrendben: 90–100%, 80–89%, …
+    [...new Set(all.map(x => decOf(x.p)))].sort((a, b) => b - a).forEach(d => {
+      const list = all.filter(x => decOf(x.p) === d);
       // Gyors döntés egy egész sávra: csak a még el nem döntött pontokra hat, a már megjelöltet nem írja felül.
       const undec = list.map(x => x.key).filter(k => !st.review[k]);
       const bulk = undec.length > 1 ? `<span class="band-act"><button class="rv-b ok" data-rvall="ok" data-keys="${esc(undec.join('§'))}">✓ Mind jóváhagyom (${undec.length})</button><button class="rv-b no" data-rvall="no" data-keys="${esc(undec.join('§'))}">✗ Egyik sem hiba</button></span>` : '';
-      h += `<h4 class="sec band-h">${bd.label} <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">(${bd.note})</span>${bulk}</h4>` + list.map(findingHtml).join('');
-    }
+      h += `<h4 class="sec eg-band band-h ${PB_CLS(d)}"><span>${bandHeadP(d)}</span> ${bandLabelP(d)} <span class="muted" style="font-weight:400">(${list.length})</span>${bulk}</h4>` + list.map(x => findingHtml(x, othersOf(x))).join('');
+    });
     if (!all.length) h += `<div class="card"><div class="card-b muted">${c.read ? 'Nem talált hibát.' : 'Készül…'}</div></div>`;
     h += `<h4 class="sec">Saját észrevétel</h4>` + manualHtml();
     // Hiányzó adatok: tételenként összevonva, minden hiányosság mellett az eredeti sor megnyitható.
