@@ -219,10 +219,13 @@
       <p>${loaded ? 'Ellenőrizze, hogy minden fájl megvan-e, aztán indítsa a feldolgozást.' : 'Húzza be egy ajánlatkérés teljes mappáját. A program maga ismeri fel, mi a tételjegyzék, a kiírás, a konszignáció és a tervlap.'}</p></div>`;
 
     // 1. A fő mező (üres állapotban nagy, betöltés után kicsi: fájlok hozzáadása vagy csere)
-    h += `<label class="drop drop-all ${loaded ? 'compact' : ''}" data-kind="all"><input type="file" multiple hidden>
+    // Kattintással a böngésző külön mappaválasztót ad (webkitdirectory), mert a sima fájlválasztó mappát nem tud.
+    const pick = `<span class="pick"><label class="btn ${loaded ? 'btn-sm' : 'btn-primary'}"><input type="file" webkitdirectory directory multiple hidden>Mappa kiválasztása</label>
+      <label class="btn ${loaded ? 'btn-sm' : ''}"><input type="file" multiple hidden>Fájlok kiválasztása</label></span>`;
+    h += `<div class="drop drop-all ${loaded ? 'compact' : ''}" data-kind="all">
       ${busy ? `<div class="drop-s"><span class="spin"></span> ${esc(st.loadingAll || E.reading || st.reading || 'A táblázat beolvasása…')}</div>`
-        : loaded ? '<div class="drop-f">Másik mappa betöltése: húzza ide, vagy kattintson</div>'
-          : '<div class="drop-t">Húzza ide a mappát</div><div class="drop-f">vagy kattintson, és jelölje ki a mappában az összes fájlt</div>'}</label>`;
+        : loaded ? `<div class="drop-row"><span class="drop-f">Másik ajánlatkérés: húzza ide a mappát, vagy</span>${pick}</div>`
+          : `<div class="drop-t">Húzza ide a mappát</div><div class="drop-f">vagy válassza ki:</div>${pick}`}</div>`;
     if (!loaded) {
       const own = [HELYI.gk ? `<button class="btn btn-sm" id="btn-gk" hidden>${esc(HELYI.gk.label.replace(/^Saját anyag:\s*/, ''))}</button>` : '',
         HELYI.kozb ? `<button class="btn btn-sm" data-sample="helyi_kozb" id="btn-kozb" hidden>${esc(HELYI.kozb.label.replace(/^Saját anyag:\s*/, ''))}</button>` : ''].join('');

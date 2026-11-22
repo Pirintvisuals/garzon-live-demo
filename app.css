@@ -171,3 +171,10 @@ td.code, .code { color: var(--text); }
 .flag-type { color: var(--faint); }
 .pbadge.pb-hi { background: #fdf0e6; color: #9a3412; border-color: #f5cfae; }
 .pbadge.pb-mid { background: var(--accent-soft); color: var(--accent-ink); border-color: #ead9b8; }
+
+/* Fő mező: mappa- és fájlválasztó gomb */
+.drop.drop-all { cursor: default; }
+.drop-all .pick { display: inline-flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 12px; }
+.drop-all .pick .btn { cursor: pointer; }
+.drop-all .drop-row { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.drop-all .drop-row .pick { margin-top: 0; }
