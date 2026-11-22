@@ -178,3 +178,77 @@ td.code, .code { color: var(--text); }
 .drop-all .pick .btn { cursor: pointer; }
 .drop-all .drop-row { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
 .drop-all .drop-row .pick { margin-top: 0; }
+
+/* ---------- Eredmény: kockázat-címke négyzet (nem nyúlik ellipszissé a magas cellában) ---------- */
+.risk { align-items: start; }
+.risk > .badge { align-self: start; justify-self: stretch; text-align: center; border-radius: 5px; padding: 3px 6px; font-size: 12px; font-weight: 600; line-height: 1.3; }
+.risk b { font-size: 14px; }
+.risk p { font-size: 13.5px; line-height: 1.5; }
+.risks { gap: 16px; }
+.risk + .risk { padding-top: 16px; border-top: 1px solid var(--border); }
+
+/* ---------- Egyezés: egy lista, valószínűség szerint csökkenően ---------- */
+.eg-how { color: var(--muted); max-width: 90ch; margin: 14px 0 10px; font-size: 13px; line-height: 1.55; }
+h4.sec.eg-band { display: flex; align-items: baseline; gap: 10px; margin: 24px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); text-transform: none; letter-spacing: 0; font-size: 13.5px; color: var(--text); font-weight: 600; }
+h4.sec.eg-band > span:first-child { font-size: 15px; font-variant-numeric: tabular-nums; }
+h4.sec.eg-band.pb-hi > span:first-child { color: #9a3412; }
+h4.sec.eg-band.pb-mid > span:first-child { color: var(--accent-ink); }
+h4.sec.eg-band.pb-lo > span:first-child { color: var(--muted); }
+.egc { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid #cbd5e1; border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px 12px; margin-bottom: 10px; }
+.egc.pb-hi { border-left-color: #b45309; }
+.egc.pb-mid { border-left-color: var(--gold); }
+.egc.rv-ok { border-left-color: #2c6845; }
+.egc.rv-no { opacity: .5; }
+.egc-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.egc-h .rv { margin-left: auto; display: flex; }
+.egc-t { font-size: 15px; font-weight: 600; }
+.egc-who { margin: 4px 0 0; font-size: 13px; }
+.egc-code { font: 600 12.5px var(--mono, "IBM Plex Mono", monospace); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; }
+.egc-d { margin: 8px 0 10px; color: var(--text); line-height: 1.55; max-width: 100ch; }
+.egc-facts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.egc-fact { display: inline-flex; flex-direction: column; min-width: 120px; padding: 6px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; line-height: 1.25; }
+.egc-fact i { font-style: normal; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .04em; }
+.egc-fact b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.egc-fact.diff { background: #fffaf0; border-color: #f0dcb4; }
+.egc-fact.none b { color: var(--faint); font-weight: 500; }
+.egc-act { display: flex; gap: 8px; }
+.egc-detail { margin-top: 12px; padding: 12px; background: var(--accent-soft); border-radius: var(--radius-sm); }
+details.eg-ok-d { margin: 20px 0 6px; }
+details.eg-ok-d > summary { cursor: pointer; font-weight: 600; font-size: 13.5px; padding: 8px 0; }
+details.eg-ok-d > .card { margin-top: 6px; }
+.eg-sh .card-h { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.eg-shr { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 9px 0; border-top: 1px solid var(--border); }
+.eg-shr:first-of-type { border-top: 0; }
+.eg-shr.rv-ok { box-shadow: inset 3px 0 0 #2c6845; padding-left: 8px; }
+.eg-shr.rv-no { opacity: .5; }
+.eg-shb { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+/* ---------- Hibák: hiányzó adatok tételenként ---------- */
+.miss-l { display: grid; gap: 0; padding: 0; }
+.miss-i { padding: 12px 16px; border-top: 1px solid var(--border); }
+.miss-i:first-child { border-top: 0; }
+.miss-h { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
+.miss-n { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 4px 0 4px 14px; border-left: 2px solid var(--border); margin: 3px 0; }
+.miss-n.rv-ok { border-left-color: #2c6845; }
+.miss-n.rv-no { opacity: .5; }
+ul.cov { margin: 0; padding-left: 18px; display: grid; gap: 6px; line-height: 1.5; }
+
+/* ---------- Gyártás: a bizonytalan tételek kiemelve, átállítható mezővel ---------- */
+.uns-bar { background: #fffaf0; border: 1px solid #f0dcb4; border-left: 4px solid var(--gold); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; line-height: 1.55; }
+tr.uns > td { background: #fffdf7; }
+td.mk-sel { white-space: nowrap; }
+td.mk-sel .btn { margin-left: 6px; }
+
+/* ---------- Általános finomítás: semlegesebb, nyugodtabb alapszínek ---------- */
+:root { --bg: #f6f6f4; --side-bg: #1b1d21; --accent: #23262b; }
+.card-h { background: var(--surface); border-bottom: 1px solid var(--border); }
+.card-h h3 { font-size: 14px; }
+.view-head h2 { font-size: 22px; }
+.topbar .proj-title { font-size: 15.5px; }
+.side .tab { padding: 10px 12px; }
+.egc-act { align-items: center; flex-wrap: wrap; }
+/* Csoportos kártya: azonos, sablonos eltérések egy táblázatban */
+.egc-grp .tbl-wrap { border: 1px solid var(--border); border-radius: var(--radius-sm); margin-top: 4px; }
+.egc-grp table.eg-t td { vertical-align: middle; }
+.egc-grp tr.eg-detail > td { background: var(--accent-soft); padding: 12px; }
+.egc-grp tr.rv-no > td { opacity: .45; }
