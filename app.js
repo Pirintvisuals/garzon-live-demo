@@ -178,96 +178,102 @@
     probed[url] = 'wait';
     fetch(url, { method: 'HEAD' }).then(r => { probed[url] = r.ok; show(); }).catch(() => { probed[url] = false; });
   }
+  // Feltöltés: üres állapotban egy nagy mező a mappának; betöltés után a betöltött anyag röviden, és egyetlen fő lépés.
   function viewUpload() {
     const c = counts();
-    const f = st.files;
-    const modeBtn = (k, t, s) => `<button class="mode-b ${mode === k ? 'on' : ''}" data-mode="${k}" ${st.running ? 'disabled' : ''}><b>${t}</b><span>${s}</span></button>`;
-    let h = `<label class="drop drop-all ${st.book ? 'has' : ''}" data-kind="all"><input type="file" multiple hidden>
-      <div class="drop-t">Egy ajánlatkérés összes fájlja egyszerre</div>
-      <div class="drop-h">Húzza ide a teljes mappát (vagy jelölje ki benne az összes fájlt). A program maga ismeri fel, mi a tételjegyzék, a kiírás, a konszignáció és a tervlap, és hogy közbeszerzésről vagy generálkivitelezői munkáról van-e szó.</div>
-      ${st.loadingAll ? `<div class="drop-s"><span class="spin"></span> ${esc(st.loadingAll)}</div>` : '<div class="drop-f">Húzza ide a mappát, vagy kattintson és jelölje ki a fájlokat</div>'}</label>`;
-    h += `<div class="modes">${modeBtn('kozbeszerzes', 'Közbeszerzés', 'tételjegyzék és kiírás (műszaki leírás, szerződéstervezet)')}${modeBtn('gk', 'Generálkivitelezői munka', 'tételjegyzék, konszignáció és tervlapok')}</div>`;
-    const gk = mode === 'gk', E = Egyezes.state;
-    h += `<div class="view-head"><div><h2>Ajánlatkérés feltöltése</h2>
-      <p>${gk
-        ? 'Generálkivitelezői munka: a tételjegyzék (Excel), a konszignáció és a tervlapok (PDF). A program alaprajzi jel szerint összeveti a hármat, kigyűjti az eltéréseket, értelmezi a tételeket, szétosztja őket gyártás szerint, és kész kérdéseket ír a generálkivitelezőnek. Ár nem kerül bele.'
-        : 'Két fájl kell: a tételjegyzék (Excel) és a kiírás dokumentuma (PDF vagy Word: műszaki leírás, szerződéstervezet). A program beolvassa a tételeket, oszlopokra bontja a leírásokat, szétosztja őket gyártás szerint, összeveti a dokumentummal, és előkészíti a kérdéseket. Ár nem kerül bele.'}</p></div></div>`;
-    const outBtn = (id, title, sub) => `<button class="fl-out" style="--sec:${SEC[id]}" data-tab="${id}" ${(id === 'egyezes' ? Egyezes.ready() : st.book) ? '' : 'disabled'}><b>${title}</b><span>${sub}</span></button>`;
-    const ins = gk
-      ? `<div class="fl-in ${f.sheet ? 'ok' : ''}"><b>Tételjegyzék (Excel)</b><span>a generálkivitelező táblázata, alaprajzi jelekkel</span></div>
-        <div class="fl-in ${E.konsz.length ? 'ok' : ''}"><b>Konszignáció (PDF)</b><span>bútor- és asztalos lapok: méret, anyag, darab</span></div>
-        <div class="fl-in ${E.plans.length ? 'ok' : ''}"><b>Tervlapok (PDF)</b><span>alaprajzok a jelekkel</span></div>
-        <div class="fl-in ${f.doc ? 'ok' : ''}"><b>Szerződés, feltételek</b><span>nem kötelező: alvállalkozói szerződés, műszaki leírás</span></div>`
-      : `<div class="fl-in ${f.sheet ? 'ok' : ''}"><b>Tételjegyzék (Excel)</b><span>mit kér, hány darabot; az árak üresek</span></div>
-        <div class="fl-in ${f.doc ? 'ok' : ''}"><b>Feltételek (PDF, Word)</b><span>határidő, fizetés, kötbér, jótállás</span></div>`;
-    const outs = gk
-      ? `${outBtn('egyezes', 'Egyezés', 'rajz, konszignáció, tételjegyzék: mi tér el')}
-        ${outBtn('kerdesek', 'Kérdések', 'kész levél a generálkivitelezőnek')}
-        ${outBtn('bontas', 'Tételek és gyártás', 'rendezve, üzemenként szétosztva')}
-        ${outBtn('arazas', 'Első árvázlat', 'hiányzó és eltérő tételek jelölve')}`
-      : `${outBtn('ellenorzes', 'Hibák a kiírásban', 'ellentmondás, elírás, hiány')}
-        ${outBtn('kerdesek', 'Kérdések', 'kész levél az ajánlatkérőnek')}
-        ${outBtn('bontas', 'Tételek és gyártás', 'rendezve, üzemenként szétosztva')}
-        ${outBtn('arazas', 'Első árvázlat', 'tételtípusonként, Excelben is')}`;
-    h += `<div class="flow">
-      <div class="fl-col"><div class="fl-h">${gk ? 'Amit a generálkivitelező küld' : 'Amit az ajánlatkérő küld'}</div>
-        ${ins}</div>
-      <div class="fl-arrow">→</div>
-      <div class="fl-mid"><b>A program végigolvassa</b><span>kb. 2 perc</span></div>
-      <div class="fl-arrow">→</div>
-      <div class="fl-col wide"><div class="fl-h">Amit Ön kap, ellenőrzésre</div><div class="fl-outs">
-        ${outs}</div></div>
-      <div class="fl-arrow">→</div>
-      <div class="fl-end"><b>Az árajánlatadó dönt</b><span>A végső árat a kolléga hagyja jóvá.</span></div>
-    </div>`;
-    h += `<div class="grid g2">
-      <label class="drop ${f.sheet ? 'has' : ''}" data-kind="sheet"><input type="file" accept=".xls,.xlsx,.xlsm,.csv" hidden>
-        <div class="drop-t">1. Tételjegyzék (Excel)</div>
-        <div class="drop-h">Az ajánlatkérő táblázata arról, mit kér és hány darabot. Az ároszlopok üresek: azokat kell majd kitölteni az ajánlathoz.</div>
-        <div class="drop-f">${f.sheet ? esc(f.sheet.name) + (st.book ? ` <button class="opn" data-open-sheet="${esc(st.book.parts[0].sheet)}" title="A táblázat megnyitása">Megnyitás</button>` : '') + (st.running ? '' : ' <button class="rm" data-remove="sheet" title="Fájl eltávolítása">Eltávolítás</button>') : 'Húzza ide, vagy kattintson (.xls, .xlsx)'}</div>
-        ${st.detecting ? '<div class="drop-s"><span class="spin"></span> A táblázat szerkezetének felismerése…</div>' : ''}
-        ${st.book ? `<div class="drop-s">${st.book.sheetCount} munkalap, ebből ${c.parts} tartalmaz tételeket · ${c.items} tétel · ${esc(qtyText(items()))}</div>${st.book.usedAi ? colInfo() : ''}` : ''}</label>
-      <label class="drop ${f.doc ? 'has' : ''}" data-kind="doc"><input type="file" accept=".pdf,.docx,.txt" multiple hidden>
-        <div class="drop-t">2. ${mode === 'gk' ? 'Szerződés, feltételek (PDF vagy Word) <span class="muted" style="font-weight:400">· nem kötelező</span>' : 'Feltételek (PDF vagy Word)'}</div>
-        <div class="drop-h">${mode === 'gk' ? 'A generálkivitelező alvállalkozói szerződése vagy szerződéstervezete, műszaki leírása: határidő, fizetés, kötbér, jótállás, visszatartás. Ha van, ebből lesz a vezetői összefoglaló és a kockázatok.' : 'A kiírás, a műszaki leírás, a szerződéstervezet: határidő, fizetés, kötbér, jótállás. Nem kötelező, de ebből lesz a vezetői összefoglaló.'}</div>
-        <div class="drop-f">${st.docs.length ? st.docs.map(d => `<div>${esc(d.fileName)} <button class="opn" data-open-doc="${esc(d.fileName)}" title="A dokumentum megnyitása">Megnyitás</button>${st.running ? '' : ` <button class="rm" data-remove="doc" data-name="${esc(d.fileName)}" title="Fájl eltávolítása">Eltávolítás</button>`}</div>`).join('') : 'Húzza ide, vagy kattintson (.pdf, .docx), több fájl is lehet'}</div>
-        ${st.reading ? `<div class="drop-s"><span class="spin"></span> ${esc(st.reading)}</div>` : ''}
-        ${st.doc ? `<div class="drop-s">${st.docs.length} dokumentum · ${st.docIndex.paras.length.toLocaleString('hu-HU')} bekezdés${st.docs.some(d => d.scanned) ? ' · szkennelt PDF szövegfelismeréssel' : ''}</div>${st.docs.filter(d => d.failedPages && d.failedPages.length).map(d => `<div class="drop-i">${esc(d.fileName)}: ${d.failedPages.length} oldal nem volt olvasható (${d.failedPages.join(', ')}. oldal).</div>`).join('')}` : ''}</label>
-    </div>`;
-    if (mode === 'gk') h += Egyezes.dropHtml();
-    h += `<div class="card"><div class="card-b actions">
-      <button class="btn btn-primary btn-lg" id="btn-run" ${st.book && !st.running ? '' : 'disabled'}>${st.running ? 'Feldolgozás folyamatban…' : (done() ? 'Feldolgozás újra' : 'Feldolgozás indítása')}</button>
-      ${HELYI.gk || HELYI.kozb ? '' : `<span class="muted small">Példa, nyilvános közbeszerzés:</span>
-      <button class="btn ${st.sample === 'szeged' ? 'on' : ''}" data-sample="szeged" ${st.running ? 'disabled' : ''}>${st.sample === 'szeged' ? '✓ Betöltve: ' : 'Minta: '}Szegedi Szakképzési Centrum, bútorbeszerzés 2026</button>
-      <button class="btn btn-sm ${st.sample === 'debrecen' ? 'on' : ''}" data-sample="debrecen" ${st.running ? 'disabled' : ''}>${st.sample === 'debrecen' ? '✓ Betöltve: ' : 'Másik minta: '}Debrecen, 2018</button>`}
-      ${HELYI.kozb ? `<button class="btn btn-sm" data-sample="helyi_kozb" id="btn-kozb" hidden>${esc(HELYI.kozb.label)}</button>` : ''}
-      ${GK.length ? `<button class="btn btn-sm" id="btn-gk" hidden>${esc(HELYI.gk.label)}</button>` : ''}
-      ${savedFile() ? `<button class="btn btn-sm" id="btn-saved-run" hidden>Tartalék: korábbi feldolgozás</button>` : ''}
-      ${st.book ? '<button class="btn btn-sm" data-tab="revizio">Módosított tételjegyzék érkezett?</button>' : ''}
-      <button class="btn" id="btn-saved" hidden>Korábban feldolgozott eredmény megnyitása</button>
-    </div></div>`;
-    if (st.savedOffer && !done() && !st.running) {
-      const d = new Date(st.savedOffer.savedAt);
-      h += `<div class="callout saved-c"><b>Ezt az ajánlatkérést már feldolgozta</b> (${d.toLocaleDateString('hu-HU')} ${d.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })}). Az eredmény ezen a gépen el van mentve, a jóváhagyásokkal és a levéllel együtt.
-        <div class="actions"><button class="btn btn-primary" id="btn-open-saved">Megnyitás (ingyenes)</button><button class="btn" id="btn-run-again">Feldolgozás újra</button></div></div>`;
+    const f = st.files, E = Egyezes.state, gk = mode === 'gk';
+    const loaded = !!(st.book || st.docs.length || E.konsz.length || E.plans.length);
+    const busy = st.loadingAll || st.detecting || st.reading || E.reading;
+    let h = `<div class="up-head"><h2>${loaded ? 'Betöltött ajánlatkérés' : 'Új ajánlatkérés'}</h2>
+      <p>${loaded ? 'Ellenőrizze, hogy minden fájl megvan-e, aztán indítsa a feldolgozást.' : 'Húzza be egy ajánlatkérés teljes mappáját. A program maga ismeri fel, mi a tételjegyzék, a kiírás, a konszignáció és a tervlap.'}</p></div>`;
+
+    // 1. A fő mező (üres állapotban nagy, betöltés után kicsi: fájlok hozzáadása vagy csere)
+    h += `<label class="drop drop-all ${loaded ? 'compact' : ''}" data-kind="all"><input type="file" multiple hidden>
+      ${busy ? `<div class="drop-s"><span class="spin"></span> ${esc(st.loadingAll || E.reading || st.reading || 'A táblázat beolvasása…')}</div>`
+        : loaded ? '<div class="drop-f">Másik mappa betöltése: húzza ide, vagy kattintson</div>'
+          : '<div class="drop-t">Húzza ide a mappát</div><div class="drop-f">vagy kattintson, és jelölje ki a mappában az összes fájlt</div>'}</label>`;
+    if (!loaded) {
+      const own = [HELYI.gk ? `<button class="btn btn-sm" id="btn-gk" hidden>${esc(HELYI.gk.label.replace(/^Saját anyag:\s*/, ''))}</button>` : '',
+        HELYI.kozb ? `<button class="btn btn-sm" data-sample="helyi_kozb" id="btn-kozb" hidden>${esc(HELYI.kozb.label.replace(/^Saját anyag:\s*/, ''))}</button>` : ''].join('');
+      h += HELYI.gk || HELYI.kozb
+        ? `<div class="up-quick"><span class="muted small">Saját anyag:</span>${own}</div>`
+        : `<div class="up-quick"><span class="muted small">Példa, nyilvános közbeszerzés:</span><button class="btn btn-sm" data-sample="szeged">Szegedi Szakképzési Centrum, 2026</button><button class="btn btn-sm" data-sample="debrecen">Debrecen, 2018</button><button class="btn btn-sm" id="btn-saved" hidden>Korábbi eredmény</button></div>`;
     }
-    if (st.book && (st.running || c.read || st.tenderStatus !== 'idle')) {
-      h += `<div class="card"><div class="card-h"><h3>Feldolgozás állapota</h3><span class="muted">${c.read} / ${c.items} tétel értelmezve</span></div><div class="card-b">
-        <div class="bar big"><i style="width:${c.items ? Math.round(100 * c.read / c.items) : 0}%"></i></div>
-        ${canReplay() || st.replayed ? '<p class="muted small" style="margin:10px 0 0">A beépített minta előre feldolgozott eredményt játszik vissza (az eredeti feldolgozás ideje a jobb felső sarokban). Saját fájl feltöltésekor a feldolgozás élőben fut.</p>' : ''}
-        <div class="steps">${stepRow('Kiírás dokumentuma: összefoglaló, összevetés, kérdések', st.tenderStatus, st.tenderError)}
-        ${st.book.parts.map(p => stepRow(`${esc(p.name)} · ${p.items.length} tétel`, st.partStatus[p.no] || 'idle', (st.partStatus['err' + p.no] || ''), p.no)).join('')}</div>
+
+    // 2. A betöltött anyag, csoportosítva
+    if (loaded) {
+      const pages = E.konsz.reduce((a, k) => a + k.items.length, 0), marks = E.result ? E.result.groups.reduce((a, g) => a + (g.pCount || 0), 0) : 0;
+      const row = (label, val, sub, ok = true) => `<div class="fg"><span class="fg-l">${label}</span><span class="fg-v ${ok ? '' : 'muted'}">${val}</span>${sub ? `<span class="fg-s">${sub}</span>` : ''}</div>`;
+      h += `<div class="card up-files"><div class="card-h"><h3>${esc(projectTitle() || 'Ajánlatkérés')}</h3><span class="badge ${gk ? 'warn' : 'grey'}">${gk ? 'Generálkivitelezői munka' : 'Közbeszerzés'}</span></div><div class="card-b">
+        ${row('Tételjegyzék', st.book ? `${esc(st.book.fileName)}` : (f.sheet ? esc(f.sheet.name) : 'nincs'), st.book ? `${c.items} tétel · ${esc(qtyText(items()))}${st.book.parts[0] ? ` · <button class="opn" data-open-sheet="${esc(st.book.parts[0].sheet)}">Megnyitás</button>` : ''}` : '', !!st.book)}
+        ${gk ? row('Konszignáció', E.konsz.length ? `${E.konsz.length} fájl` : 'nincs', E.konsz.length ? `${pages} lap` : '', !!E.konsz.length) : ''}
+        ${gk ? row('Tervlapok', E.plans.length ? `${E.plans.length} fájl` : 'nincs', E.plans.length ? `${marks} bútorjel a rajzokon` : '', !!E.plans.length) : ''}
+        ${row(gk ? 'Szerződés, feltételek' : 'Kiírás dokumentumai', st.docs.length ? `${st.docs.length} fájl` : (gk ? 'nincs (nem kötelező)' : 'nincs'), st.docs.length ? `${st.docIndex ? st.docIndex.paras.length.toLocaleString('hu-HU') + ' bekezdés' : ''}${st.docs.some(d => d.scanned) ? ' · szkennelt PDF is, szövegfelismeréssel' : ''}` : '', !!st.docs.length)}
+        ${st.docs.filter(d => d.failedPages && d.failedPages.length).map(d => `<div class="drop-i">${esc(d.fileName)}: ${d.failedPages.length} oldal nem volt olvasható.</div>`).join('')}
+        ${E.error ? `<div class="drop-i">${esc(E.error)}</div>` : ''}
+        <div class="up-links">
+          ${st.book ? '<button class="lnk" data-tab="revizio">Módosított tételjegyzék érkezett?</button>' : ''}
+          ${savedFile() ? '<button class="lnk" id="btn-saved-run" hidden>Tartalék: korábbi feldolgozás</button>' : ''}</div>
       </div></div>`;
     }
+
+    // 3. A következő lépés: mindig egy fő gomb
+    if (st.book && !busy) {
+      const tGo = gk && Egyezes.ready() ? `<button class="btn" data-tab="egyezes">Egyezés megnyitása <span class="b-sub">azonnal, ingyenes</span></button>` : '';
+      if (st.running) {
+        h += `<div class="card next"><div class="card-h"><h3>Feldolgozás folyamatban</h3><span class="muted">${c.read} / ${c.items} tétel értelmezve</span></div><div class="card-b">
+          <div class="bar big"><i style="width:${c.items ? Math.round(100 * c.read / c.items) : 0}%"></i></div>
+          <div class="steps">${stepRow('Kiírás dokumentuma: összefoglaló, összevetés', st.tenderStatus, st.tenderError)}
+          ${st.book.parts.map(p => stepRow(`${esc(p.name)} · ${p.items.length} tétel`, st.partStatus[p.no] || 'idle', (st.partStatus['err' + p.no] || ''), p.no)).join('')}</div>
+          ${gk && Egyezes.ready() ? '<p class="muted small" style="margin:10px 0 0">Amíg fut, az Egyezés már megnézhető.</p>' : ''}<div class="actions" style="margin-top:8px">${tGo}</div></div></div>`;
+      } else if (st.savedOffer && !done()) {
+        const d = new Date(st.savedOffer.savedAt);
+        h += `<div class="card next saved"><div class="card-b"><div class="next-t">Ezt az ajánlatkérést már feldolgozta</div>
+          <p>${d.toLocaleDateString('hu-HU')} ${d.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit' })} · az eredmény ezen a gépen el van mentve, a jóváhagyásokkal és a levelekkel együtt.</p>
+          <div class="actions"><button class="btn btn-primary btn-lg" id="btn-open-saved">Megnyitás <span class="b-sub">ingyenes, azonnal</span></button>
+          <button class="btn" id="btn-run-again">Feldolgozás újra <span class="b-sub">kb. 2 perc, MI-használattal</span></button>${tGo}</div></div></div>`;
+      } else if (done()) {
+        h += `<div class="card next"><div class="card-b"><div class="next-t">Feldolgozva</div><p>Az eredmény ezen a gépen el van mentve.</p>
+          <div class="actions"><button class="btn btn-primary btn-lg" data-tab="osszefoglalo">Eredmény megnyitása</button>${tGo}<button class="btn" id="btn-run">Feldolgozás újra <span class="b-sub">MI-használattal</span></button></div></div></div>`;
+      } else {
+        const failed = st.tenderStatus === 'err' || Object.keys(st.partStatus).some(k => st.partStatus[k] === 'err');
+        h += `<div class="card next"><div class="card-b"><div class="next-t">Következő lépés</div>
+          <p>${gk ? 'A program értelmezi a tételeket a konszignációval együtt, megkeresi a hibákat, szétosztja a tételeket gyártás szerint, és előkészíti a kérdéseket.' : 'A program értelmezi a tételeket, összeveti a kiírással, kigyűjti a feltételeket és a kockázatokat, szétosztja a tételeket gyártás szerint, és előkészíti a kérdéseket.'}</p>
+          ${failed ? `<div class="drop-i">${esc(st.tenderError || 'A feldolgozás egy része nem sikerült.')} Próbálja újra, vagy töltse be a korábbi feldolgozást.</div>` : ''}
+          <div class="actions"><button class="btn btn-primary btn-lg" id="btn-run">Feldolgozás indítása <span class="b-sub">kb. 2 perc</span></button>${tGo}</div></div></div>`;
+      }
+    }
+
+    // 4. Fájlok egyenként (rejtve, ha nincs rá szükség)
+    const manual = !loaded || st.manualOpen;
+    h += `<details class="up-manual" ${st.manualOpen ? 'open' : ''}><summary>${loaded ? 'Fájlok egyenként' : 'Inkább fájlonként tölti fel?'}</summary>`;
+    if (manual) {
+      const modeBtn = (k, t) => `<button class="seg-b ${mode === k ? 'on' : ''}" data-mode="${k}" ${st.running ? 'disabled' : ''}>${t}</button>`;
+      h += `<div class="seg">${modeBtn('kozbeszerzes', 'Közbeszerzés')}${modeBtn('gk', 'Generálkivitelezői munka')}</div>
+      <div class="grid g2">
+        <label class="drop ${f.sheet ? 'has' : ''}" data-kind="sheet"><input type="file" accept=".xls,.xlsx,.xlsm,.csv" hidden>
+          <div class="drop-t">Tételjegyzék (Excel)</div>
+          <div class="drop-f">${f.sheet ? esc(f.sheet.name) + (st.running ? '' : ' <button class="rm" data-remove="sheet">Eltávolítás</button>') : 'Húzza ide, vagy kattintson'}</div>
+          ${st.book && st.book.usedAi ? colInfo() : ''}</label>
+        <label class="drop ${f.doc ? 'has' : ''}" data-kind="doc"><input type="file" accept=".pdf,.docx,.txt" multiple hidden>
+          <div class="drop-t">${gk ? 'Szerződés, feltételek <span class="muted" style="font-weight:400">· nem kötelező</span>' : 'Kiírás dokumentumai (PDF, Word)'}</div>
+          <div class="drop-f">${st.docs.length ? st.docs.map(d => `<div>${esc(d.fileName)} <button class="opn" data-open-doc="${esc(d.fileName)}">Megnyitás</button>${st.running ? '' : ` <button class="rm" data-remove="doc" data-name="${esc(d.fileName)}">Eltávolítás</button>`}</div>`).join('') : 'Húzza ide, vagy kattintson; több fájl is lehet'}</div></label>
+      </div>
+      ${gk ? Egyezes.dropHtml() : ''}`;
+    }
+    h += `</details>`;
+
+    // 5. A beolvasott tételek: csak kérésre
+    if (st.book && !st.running && !c.read) h += `<details class="up-items"><summary>Beolvasott tételek (${c.items})</summary>${previewTable()}</details>`;
     if (st.book && st.book.skipped.length) h += `<p class="muted small">Tétel nélküli munkalapok (kihagyva): ${st.book.skipped.map(esc).join(', ')}</p>`;
-    if (st.book && !st.running && !c.read) h += previewTable();
+
     $('#view-feltoltes').innerHTML = h;
-    // Helyi fájlok megléte: egyszer kérdezzük le, utána emlékszünk rá (ne legyen minden rajzolásnál új kérés).
-    if (!HELYI.gk && !HELYI.kozb) probe('data/mentett.json', '#btn-saved');
-    if (HELYI.kozb) probe(HELYI.kozb.sheet[0], '#btn-kozb');
+    if (!HELYI.gk && !HELYI.kozb && !loaded) probe('data/mentett.json', '#btn-saved');
+    if (HELYI.kozb && !loaded) probe(HELYI.kozb.sheet[0], '#btn-kozb');
+    if (GK.length && !loaded) probe(GK[0], '#btn-gk');
     if (savedFile() && st.book) probe(savedFile(), '#btn-saved-run');
-    if (GK.length) probe(GK[0], '#btn-gk');
   }
+
   // Ismeretlen szerkezetű táblázatnál megmutatjuk, mit minek olvasott a program.
   function colInfo() {
     const p = st.book.parts.find(x => x.ai); if (!p) return '';
@@ -1313,6 +1319,7 @@ im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`
     else if (t.id === 'man-add') { const txt = ($('#man-text') || {}).value || ''; if (txt.trim()) { st.manual.push({ id: Date.now().toString(36), item: ($('#man-item') || {}).value || '', text: txt.trim() }); const y = window.scrollY; render(); window.scrollTo(0, y); } }
     else if (t.dataset.manDel) { st.manual = st.manual.filter(m => m.id !== t.dataset.manDel); const y = window.scrollY; render(); window.scrollTo(0, y); }
     else if (t.id === 'btn-write-q') writeQuestions();
+    else if (t.dataset.upManual !== undefined) { st.manualOpen = !st.manualOpen; render(); }
     else if (t.id === 'btn-open-saved') openSaved();
     else if (t.id === 'btn-run-again') { st.savedOffer = null; run(); }
     else if (t.id === 'btn-mail') { const txt = ($('#letter-text') || {}).value || questionsText(); const subj = (gkMode() ? 'Kérdések: ' : 'Kiegészítő tájékoztatás-kérés: ') + projectTitle(); location.href = 'mailto:?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(txt); }
@@ -1342,6 +1349,8 @@ im vorliegenden Vergabeverfahren bitten wir um folgende ergänzende Auskünfte:`
       else { if (d.dataset.kind === 'sheet') st.sample = ''; setFile(d.dataset.kind, d.dataset.kind === 'doc' ? [...e.dataTransfer.files] : e.dataTransfer.files[0]); }
     }
   }));
+  // A „Fájlok egyenként” rész nyitva maradjon a következő rajzoláskor is.
+  document.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('up-manual')) { const o = e.target.open; if (st.manualOpen !== o) { st.manualOpen = o; render(); } } }, true);
   document.addEventListener('input', e => { if (e.target.id === 'letter-text' && st.letter) { st.letter.text = e.target.value; saveJobSoon(); } });
   document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'chat-in') { e.preventDefault(); askChat(e.target.value); } });
   // Ctrl+Shift+S: a feldolgozott eredmény mentése JSON-ba (ebből lesz a data/mentett.json tartalék).
