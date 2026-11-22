@@ -28,7 +28,7 @@
   const base = c => c.replace(/[a-z]$/, '');
   const prefixOf = c => c.replace(/-?\d.*$/, '');
 
-  const fresh = () => ({ sheet: null, konsz: [], plans: [], reading: '', result: null, filter: 'elteres', error: '' });
+  const fresh = () => ({ sheet: null, konsz: [], plans: [], reading: '', result: null, filter: 'elteres', error: '', open: {} });
   let st = fresh();
   const pdfDocs = {}; // fájlnév -> pdf.js dokumentum (a kiemeléshez újra kell rajzolni)
 
@@ -96,7 +96,7 @@
         const no = noCell && !noErr ? noCell.v : '';
         const spec = col.spec != null ? String(val(r, col.spec)).trim() : '';
         const row = { row: r + 1, sheet: sheetName, no, codeCell, codes: expandCodes(codeCell), text, spec, qty: Number.isFinite(qty) ? qty : null, unit: String(col.unit != null ? val(r, col.unit) : '').trim() || 'db', section, hidden, issues: [] };
-        if (hidden) row.issues.push({ t: 'Rejtett sor', d: 'A sor el van rejtve a táblázatban: nyomtatásban és átnézéskor nem látszik, könnyen kimarad az árazásból.', p: 95 });
+        if (hidden) row.issues.push({ t: 'Rejtett sor', d: 'A sor el van rejtve a táblázatban. Lehet szándékos (nem része a munkának), lehet véletlen: nyomtatásban nem látszik. Érdemes megkérdezni, hogy árazandó-e.', p: 50 });
         if (noErr) row.issues.push({ t: 'Hibás sorszám', d: 'A sorszám cellája hibás hivatkozást ad (#REF!): a táblázatból sorokat töröltek vagy másoltak, a sorszámozás nem megbízható.', p: 60 });
         if (/nincs pontos adat|nincs adat|rajz szerint\?|tisztázandó/i.test(text + ' ' + spec)) row.issues.push({ t: 'Hiányzó adat', d: `A sor szövege szerint nincs pontos adat: „${text.replace(/\s+/g, ' ').slice(0, 80)}”.`, p: 90 });
         if (!row.codes.length) row.issues.push({ t: 'Nincs alaprajzi jel', d: 'A tételnek nincs jele, ezért nem párosítható a konszignációval és a rajzzal.', p: 60 });
@@ -291,7 +291,7 @@
       const inSheet = g.rows.length > 0, inKonsz = g.konsz.length > 0, onPlan = pCount > 0;
       const unit = (g.rows[0] && g.rows[0].unit) || (g.konsz[0] && g.konsz[0].unit) || 'db';
       const countable = /^(db|szett|pár)$/i.test(unit);
-      if (haveSheet && !inSheet) f.push({ t: 'Hiányzik a tételjegyzékből', d: inKonsz ? `A konszignációban szerepel (${kQty != null ? fmt(kQty) + ' ' + unit : 'mennyiség nélkül'})${onPlan ? `, a rajzon ${pCount} helyen` : ''}, de a tételjegyzékben nincs ilyen sor. Ha nem másik alvállalkozó árazza, kimarad az ajánlatból.` : `A rajzon ${pCount} helyen szerepel, de sem a tételjegyzékben, sem a konszignációban nincs.`, p: inKonsz ? 90 : 75 });
+      if (haveSheet && !inSheet) f.push({ t: 'Nincs a küldött listában', d: (inKonsz ? `A konszignációban szerepel (${kQty != null ? fmt(kQty) + ' ' + unit : 'mennyiség nélkül'})${onPlan ? `, a rajzon ${pCount} helyen` : ''}, a tételjegyzékben nincs sora.` : `A rajzon ${pCount} helyen szerepel, de sem a tételjegyzékben, sem a konszignációban nincs.`) + ' Valószínűleg szándékosan: a generálkivitelező a listát az ajánlattevőre szabta, és ezt más alvállalkozó szállítja. Érdemes megerősíttetni, hogy nem az Önök része; ha mégis, most kimaradna az árból.', p: 50 });
       if (haveKonsz && !inKonsz && (inSheet || onPlan)) {
         const other = !konszPrefixes.has(prefixOf(codes[0]));
         f.push({ t: 'Nincs konszignációs lapja', d: other ? `Ehhez a jelcsoporthoz (${prefixOf(codes[0])}) nem érkezett konszignáció. A műszaki tartalmat másik tervlapról kell venni${onPlan ? ' (a jel a rajzon megtalálható)' : ''}.` : 'A konszignációban nincs ilyen jelű lap, így a méret és az anyag nem ellenőrizhető.', p: other ? 45 : 80 });
@@ -375,7 +375,11 @@
     st.result = (st.sheet || st.konsz.length) && (st.konsz.length || st.plans.length) ? compare() : null;
     App.render();
   }
-  // A tervlapok rajzolási utasításait a háttérben előre feldolgozza, hogy a „Rajzon” gomb gyorsan nyíljon.
+  // A tervlapokat betöltés után a háttérben egyszer megrajzolja (képként eltárolva). Utána a „Rajzon” nézet
+  // és az Ellenőrzés panel kivágásai azonnal megjelennek, nem kell minden kattintásnál újrarajzolni.
+  const pageCache = {};
+  const zoomBase = w => Math.min(1, 6000 / w) * (w < 2000 ? 2.2 : 1);
+  const CACHE_Z = 0.6;
   let warming = false;
   async function warm() {
     if (warming) return; warming = true;
@@ -383,12 +387,35 @@
       for (const p of st.plans) {
         const pdf = pdfDocs[p.fileName]; if (!pdf) continue;
         for (let n = 1; n <= pdf.numPages; n++) {
+          const key = p.fileName + '|' + n;
+          if (pageCache[key]) continue;
           const page = await pdf.getPage(n);
-          const c = document.createElement('canvas'); c.width = 8; c.height = 8;
-          try { await page.render({ canvasContext: c.getContext('2d'), viewport: page.getViewport({ scale: 8 / page.getViewport({ scale: 1 }).width }) }).promise; } catch (e) { /* nem baj */ }
+          const w1 = page.getViewport({ scale: 1 }).width, scale = CACHE_Z * zoomBase(w1);
+          const vp = page.getViewport({ scale });
+          const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+          try { await page.render({ canvasContext: c.getContext('2d'), viewport: vp, intent: 'print' }).promise; pageCache[key] = { canvas: c, scale }; } catch (e) { /* nem baj: kattintáskor élőben rajzol */ }
+          fillCrops();
         }
       }
     } finally { warming = false; }
+  }
+  // Az Ellenőrzés panel rajzi kivágásai: a jel környéke a tervlapról, bekarikázva.
+  function fillCrops() {
+    document.querySelectorAll('canvas[data-crop]').forEach(cv => {
+      if (cv.dataset.done) return;
+      const [gi, hi] = cv.dataset.crop.split('|').map(Number);
+      const g = st.result && st.result.groups[gi], h = g && g.hits[hi];
+      const ctx = cv.getContext('2d');
+      const cache = h && pageCache[h.fileName + '|' + h.page];
+      if (!cache) { ctx.fillStyle = '#f3f4f6'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.fillStyle = '#6b7280'; ctx.font = '12px sans-serif'; ctx.fillText('rajzolás…', 10, 20); return; }
+      const z = cache.scale, cx = (h.x + h.w / 2) * z, cy = (h.y + h.h / 2) * z;
+      const sw = 220, sh = 147;
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(cache.canvas, cx - sw / 2, cy - sh / 2, sw, sh, 0, 0, cv.width, cv.height);
+      ctx.strokeStyle = '#d62828'; ctx.lineWidth = 2.5; ctx.beginPath();
+      ctx.arc(cv.width / 2, cv.height / 2, Math.max(18, Math.max(h.w, h.h) * z * (cv.width / sw) * 0.9 + 8), 0, Math.PI * 2); ctx.stroke();
+      cv.dataset.done = '1';
+    });
   }
   const ready = () => !!st.result;
   const reset = () => { st = fresh(); };
@@ -427,7 +454,7 @@
       <div><button class="btn btn-primary" id="eg-xlsx">Eltérések letöltése (Excel)</button></div></div>`;
     h += `<div class="kpis">
       <div class="kpi"><div class="l">Összevetett jel</div><div class="v">${gs.length}</div><div class="s">${gs.length - withF.length} egyezik</div></div>
-      <div class="kpi warn"><div class="l">Hiányzik a tételjegyzékből</div><div class="v">${cnt('Hiányzik a tételjegyzékből')}</div><div class="s">a rajzon vagy a konszignációban van</div></div>
+      <div class="kpi"><div class="l">Nincs a küldött listában</div><div class="v">${cnt('Nincs a küldött listában')}</div><div class="s">kié? valószínűleg más alvállalkozóé</div></div>
       <div class="kpi warn"><div class="l">Eltérő mennyiség vagy méret</div><div class="v">${gs.filter(g => g.findings.some(f => /mennyiség|méret|darabszám|fér el/.test(f.t))).length}</div><div class="s">tételjegyzék, konszignáció, rajz</div></div>
       <div class="kpi"><div class="l">Táblázat hibái</div><div class="v">${R.sheetIssues.length + gs.reduce((s, g) => s + g.rows.reduce((a, r) => a + r.issues.length, 0), 0) + R.noCode.reduce((a, r) => a + r.issues.length, 0)}</div><div class="s">rejtett sor, hibás cella, hiányzó adat</div></div></div>`;
     const F = [['elteres', `Csak eltérések (${withF.length})`], ['mind', `Minden jel (${gs.length})`]];
@@ -445,6 +472,7 @@
         </tbody></table></div></div>`;
     }
     el.innerHTML = h;
+    fillCrops();
   }
   function rowHtml(g, idx, planCols) {
     const per = Object.entries(g.perPlan).map(([k, v]) => `${esc(k)}: ${v}`).join('\n') +
@@ -452,7 +480,9 @@
       (g.overlapExtra ? `\n\n${g.overlapExtra} jel két átfedő részletrajzon is szerepel, egyszer számolva.` : '');
     const key = f => 'e:' + g.codes.join(',') + '|' + f.t;
     const fs = g.findings.map(f => `<div class="eg-f${App.rvCls ? App.rvCls(key(f)) : ''}"><div><span class="pbadge ${PB(f.p)}">${f.p}%</span> <b>${esc(f.t)}</b><span class="muted"> · ${esc(f.d)}</span></div>${App.rvBtns ? App.rvBtns(key(f)) : ''}</div>`).join('') || '<span class="badge ok">Egyezik</span>';
+    const isOpen = !!st.open[idx];
     const btns = [
+      `<button class="btn btn-sm ${isOpen ? 'btn-primary' : ''}" data-eg-check="${idx}">${isOpen ? 'Ellenőrzés ▴' : 'Ellenőrzés ▾'}</button>`,
       g.hits.length ? `<button class="btn btn-sm" data-eg-plan="${idx}">Rajzon</button>` : '',
       g.konsz.length ? `<button class="btn btn-sm" data-eg-konsz="${idx}">Konszignáció</button>` : '',
       g.rows.length ? `<button class="btn btn-sm" data-eg-sheet="${g.rows[0].row}">Táblázat</button>` : ''
@@ -461,7 +491,23 @@
       ${planCols ? `<td class="num" title="${esc(per)}">${g.pCount ? g.pCount + ' <span class="muted">hely</span>' + (g.overlapExtra ? `<div class="faint small">átfedés: ${g.rawCount} → ${g.pCount}</div>` : '') : '<span class="muted">–</span>'}</td>` : ''}
       <td class="num">${cellQty(g.kQty, g.unit, st.konsz.length && !g.konsz.length)}</td>
       <td class="num">${cellQty(g.tjQty, g.unit, st.sheet && !g.rows.length)}</td>
-      <td>${fs}</td><td class="nowrap">${btns}</td></tr>`;
+      <td>${fs}</td><td class="eg-btns">${btns}</td></tr>${isOpen ? `<tr class="eg-detail"><td colspan="${planCols ? 7 : 6}">${detailHtml(g, idx)}</td></tr>` : ''}`;
+  }
+  // Ellenőrzés: a három forrás egymás mellett, hogy egy pillantással látszódjon, tényleg mindhárom helyen ott van-e.
+  function detailHtml(g, idx) {
+    const tj = g.rows.length ? g.rows.map(r => `<div class="eg-src"><div class="eg-src-h"><b>${r.row}. sor</b> · ${esc(r.codeCell || '–')} · <b>${r.qty == null ? 'nincs mennyiség' : fmt(r.qty) + ' ' + esc(r.unit)}</b>${r.hidden ? ' · <span class="neg-t">rejtett sor</span>' : ''}</div>
+        <div>${esc(r.text.replace(/\s+/g, ' ').slice(0, 260))}</div>${r.spec ? `<div class="muted small">${esc(r.spec.replace(/\s+/g, ' ').slice(0, 220))}</div>` : ''}
+        <button class="btn btn-sm" data-eg-sheet="${r.row}">Táblázat</button></div>`).join('') : '<div class="muted">A tételjegyzékben nincs ilyen sor.</div>';
+    const ks = g.konsz.length ? g.konsz.map(k => `<div class="eg-src"><div class="eg-src-h"><b>${esc(k.fileName.replace(/\.pdf$/i, '').slice(-34))}</b> · ${k.page}. oldal · <b>${k.qty == null ? 'nincs mennyiség' : fmt(k.qty) + ' ' + esc(k.unit)}</b></div>
+        <div>${esc(k.name)}</div>${k.dims.length ? `<div class="muted small">Méret: ${k.dims.map(d => esc(d.raw) + (d.max ? ' (legfeljebb)' : '')).join('; ')}</div>` : ''}${k.qtyRaw ? `<div class="muted small">${esc(k.qtyRaw)}</div>` : ''}
+        <button class="btn btn-sm" data-eg-page="${esc(k.fileName)}|${k.page}">Lap</button></div>`).join('') : '<div class="muted">Nincs konszignációs lapja.</div>';
+    const MAX = 18;
+    const pl = g.hits.length ? `<div class="eg-crops">${g.hits.slice(0, MAX).map((h, i) => `<button class="eg-crop" data-eg-hit="${idx}|${i}" title="Megnyitás a tervlapon"><canvas data-crop="${idx}|${i}" width="198" height="132"></canvas><span>${esc(h.label.replace(/ALAPRAJZ,?\s*/i, '').trim())}${h.room ? ' · ' + esc(h.room) : ''}</span></button>`).join('')}</div>
+        ${g.hits.length > MAX ? `<div class="muted small">…és még ${g.hits.length - MAX} hely</div>` : ''}${g.overlapExtra ? `<div class="muted small">${g.overlapExtra} jel két átfedő részletrajzon is szerepel; a darabszámban egyszer számolva (${g.rawCount} → ${g.pCount}).</div>` : ''}` : '<div class="muted">A feltöltött tervlapokon nem szerepel.</div>';
+    return `<div class="eg-detail-g">
+      <div><h5>Tételjegyzék · ${g.tjQty == null ? '–' : fmt(g.tjQty) + ' ' + esc(g.unit)}</h5>${tj}</div>
+      <div><h5>Konszignáció · ${g.kQty == null ? '–' : fmt(g.kQty) + ' ' + esc(g.unit)}</h5>${ks}</div>
+      <div><h5>Rajz · ${g.pCount || 0} hely</h5>${pl}</div></div>`;
   }
 
   /* ---------- források megnyitása ---------- */
@@ -492,12 +538,12 @@
     modal(`Konszignáció · ${g.codes.map(esc).join(', ')}`, body, '<span>A konszignációs lap szövege, ahogy a PDF-ben áll.</span>');
   }
   // Tervlap vagy konszignációs lap kirajzolása; a jel minden előfordulása bekarikázva.
-  async function openPage(fileName, pageNo, marks, title) {
+  async function openPage(fileName, pageNo, marks, title, start) {
     const pdf = pdfDocs[fileName]; if (!pdf) { alert('A fájl ebben a munkamenetben már nem érhető el. Töltse fel újra.'); return; }
     const page = await pdf.getPage(pageNo);
     const vp1 = page.getViewport({ scale: 1 });
-    const zooms = [0.4, 0.6, 1.1].map(z => z * Math.min(1, 6000 / vp1.width) * (vp1.width < 2000 ? 2.2 : 1));
-    let zi = marks && marks.length ? 1 : 0, cur = 0;
+    const zooms = [0.4, CACHE_Z, 1.1].map(z => z * zoomBase(vp1.width));
+    let zi = marks && marks.length ? 1 : 0, cur = start || 0;
     const others = marks && marks.length ? `<span class="muted small" id="eg-cnt"></span> <button class="btn btn-sm" id="eg-prev">← Előző</button> <button class="btn btn-sm" id="eg-next">Következő →</button>` : '';
     const m = modal(title, `<div class="eg-zoom"><button class="btn btn-sm" data-z="-1">−</button><button class="btn btn-sm" data-z="1">+</button> ${others}</div><div class="eg-canvas-wrap" id="eg-cw"><div class="eg-stage" id="eg-stage"><canvas id="eg-cv"></canvas><svg id="eg-ov"></svg></div><div class="eg-loading" id="eg-ld"><span class="spin"></span> A tervlap rajzolása…</div></div>`,
       `<span>${esc(fileName)} · ${pageNo}. oldal${marks && marks.length ? ` · a jel ${marks.length} helyen` : ''}. Vektoros rajz, a jelek a PDF szövegéből.</span>`, 'eg-modal');
@@ -512,6 +558,8 @@
       ov.setAttribute('width', cv.width); ov.setAttribute('height', cv.height);
       ov.innerHTML = (marks || []).map((k, i) => { const r = Math.max(k.w, k.h) * z * 0.9 + 10; return `<circle cx="${(k.x + k.w / 2) * z}" cy="${(k.y + k.h / 2) * z}" r="${r}" class="${i === cur ? 'cur' : ''}"/>`; }).join('');
       if (task) { try { task.cancel(); } catch (e) { /* már kész */ } }
+      const cache = pageCache[fileName + '|' + pageNo];
+      if (cache && Math.abs(cache.scale - z) < 1e-6) { cv.getContext('2d').drawImage(cache.canvas, 0, 0); ld.hidden = true; focus(true); return; }
       task = page.render({ canvasContext: cv.getContext('2d'), viewport: vp });
       try { await task.promise; } catch (e) { return; }
       ld.hidden = true;
@@ -577,6 +625,12 @@
     if (t.dataset.egRemove) { e.preventDefault(); remove(t.dataset.egRemove); }
     else if (t.dataset.egFilter) { st.filter = t.dataset.egFilter; App.render(); }
     else if (t.dataset.egPlan) openPlan(Number(t.dataset.egPlan));
+    else if (t.dataset.egCheck) { const y = window.scrollY, i = Number(t.dataset.egCheck); st.open[i] = !st.open[i]; App.render(); window.scrollTo(0, y); }
+    else if (t.dataset.egHit) {
+      const [gi, hi] = t.dataset.egHit.split('|').map(Number), g = st.result.groups[gi], h = g.hits[hi];
+      const marks = g.hits.filter(x => x.fileName === h.fileName && x.page === h.page);
+      openPage(h.fileName, h.page, marks, `${g.codes.map(esc).join(', ')} · ${esc(h.label)} · ${marks.length} hely`, marks.indexOf(h));
+    }
     else if (t.dataset.egKonsz) openKonsz(Number(t.dataset.egKonsz));
     else if (t.dataset.egSheet) openSheetRow(Number(t.dataset.egSheet));
     else if (t.dataset.egPage) { const [f, p] = t.dataset.egPage.split('|'); openPage(f, Number(p), null, `${esc(f)} · ${p}. oldal`); }
@@ -603,7 +657,7 @@
   function questions() {
     const R = st.result; if (!R) return [];
     const gs = R.groups, q = [];
-    const miss = gs.filter(g => has(g, 'Hiányzik a tételjegyzékből') && g.konsz.length);
+    const miss = gs.filter(g => has(g, 'Nincs a küldött listában') && g.konsz.length);
     if (miss.length) q.push({ p: 90, kerdes: `A konszignációban szerepelnek, de a tételjegyzékben nincsenek: ${miss.map(g => `${label(g)}: ${qtyS(g.kQty, g.unit)}`).join('; ')}. Kérjük, erősítsék meg, hogy ezek a tételek ajánlatunk részét képezik-e, vagy más alvállalkozó árazza őket.`, miert: 'Ha a mi ajánlatunk része, a tételjegyzék alapján kimaradna az árból; ha nem, jó tudni, kié.', codes: miss.flatMap(g => g.codes) });
     const ghost = gs.filter(g => !g.konsz.length && !g.rows.length && g.pCount);
     if (ghost.length) q.push({ p: 75, kerdes: `A tervlapokon szerepelnek a következő jelek, de sem konszignációs lap, sem tétel nem tartozik hozzájuk: ${ghost.map(g => `${g.codes.join(', ')} (${g.pCount} helyen)`).join('; ')}. Mit jelölnek, és részei-e az ajánlatnak?`, miert: 'A rajzon lévő, de sehol nem leírt elemet nem lehet beárazni.', codes: ghost.flatMap(g => g.codes) });

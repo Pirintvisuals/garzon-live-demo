@@ -338,7 +338,7 @@
     const top = gs.flatMap(g => g.findings.filter(f => KEY.includes(f.t)).map(f => ({ g, f }))).sort((x, y) => y.f.p - x.f.p)
       .filter((x, i, arr) => arr.findIndex(z => z.g === x.g) === i).slice(0, 2);
     return `<div class="hubc warn"><div class="hub-n">${gs.length}</div><div class="hub-t">jelnél eltér a rajz, a konszignáció és a tételjegyzék</div>
-      <ul><li><b>${miss} tétel hiányzik a tételjegyzékből</b>, de a konszignációban vagy a rajzon szerepel.</li>
+      <ul><li><b>${miss} tétel nincs a küldött listában</b> (a rajzon vagy a konszignációban szerepel): valószínűleg más alvállalkozóé, érdemes megerősíttetni.</li>
       ${top.map(({ g, f }) => `<li><b>${esc(g.codes.join(', '))}:</b> ${esc(f.d)} <span class="muted">(${f.p}%)</span></li>`).join('')}
       <li>Amit jóváhagy, abból kérdés készül a generálkivitelezőnek.</li></ul>
       <button class="btn btn-primary" data-tab="egyezes">Egyezés</button> <button class="btn" data-tab="kerdesek">Levél</button></div>`;
@@ -352,6 +352,18 @@
     const allF = allFindings(), sure = allF.filter(x => x.p >= 50), top = sure.slice(0, 3);
     const fTitle = x => x.kind === 'item' ? (x.its.length > 1 ? x.its.length + ' tétel' : shortName(x.its[0].name)) : x.f.cim;
     h += `<p class="lead" style="margin-bottom:14px">${esc(o.rovid_leiras)}</p>`;
+    // Határidők (a dokumentumból, forrással) és hol tart a munka: ezt kell először látni.
+    const dl = (o.feltetelek || []).filter(f => /határid/i.test(f.nev)).map(f => {
+      const m = String(f.ertek).match(/(\d{4})[.\-]\s?(\d{1,2})[.\-]\s?(\d{1,2})/);
+      let left = '';
+      if (m) { const d = new Date(+m[1], +m[2] - 1, +m[3]), n = Math.ceil((d - new Date()) / 86400000); left = n < 0 ? 'lejárt' : n === 0 ? 'ma' : `${n} nap van hátra`; }
+      return `<div class="dl"><span class="dl-l">${esc(f.nev)}</span><b>${esc(String(f.ertek).slice(0, 80))}</b>${left ? `<span class="badge ${left === 'lejárt' ? 'grey' : 'warn'}">${left}</span>` : ''}</div>`;
+    }).join('');
+    const rvAll2 = reviewables(), open2 = rvAll2.filter(k => !st.review[k]).length, ok2 = rvAll2.filter(k => st.review[k] === 'ok').length + st.manual.length;
+    const unsure = items().filter(i => makerConf(i) === 'bizonytalan').length;
+    h += `<div class="status-strip">${dl ? `<div class="dls">${dl}</div>` : ''}
+      <div class="sts"><span class="st-i"><b>${open2}</b> felvetés vár átnézésre</span><span class="st-i"><b>${ok2}</b> jóváhagyva</span>
+      <span class="st-i">${st.letter ? `<b>${st.letter.qs.length}</b> kérdés kész` : 'kérdéslevél még nincs'}</span>${unsure ? `<span class="st-i"><b>${unsure}</b> tétel besorolása bizonytalan</span>` : ''}</div></div>`;
     h += `<div class="hub">
       <div class="hubc warn"><div class="hub-n">${sure.length}</div><div class="hub-t">biztos vagy valószínű hibát talált a kiírásban${allF.length > sure.length ? `, és ${allF.length - sure.length} további pontot, amit érdemes megnézni` : ''}</div>
         <ul>${top.map(x => `<li><b>${esc(fTitle(x))}:</b> ${esc(x.kind === 'item' ? x.n.szoveg : x.f.leiras)} <span class="muted">(${x.p}%)</span></li>`).join('') || '<li class="muted">Nem talált valószínű hibát.</li>'}</ul>
@@ -511,22 +523,32 @@
     const g = WS[k]; if (!g) return;
     const list = items().filter(i => g.test(makerOf(i)));
     const head = [['Projekt', projectTitle()], ['Lista', g.title], ['Tételek', list.length], []];
-    const rows = [['Tétel', 'Megnevezés', 'Leírás', 'Szélesség (mm)', 'Mélység (mm)', 'Magasság (mm)', 'Anyag', 'Váz', 'Szín', 'Mennyiség', 'Egység', 'Megjegyzés', 'Forrás']];
+    const rows = [['Tétel', 'Besorolás', 'Megnevezés', 'Leírás', 'Szélesség (mm)', 'Mélység (mm)', 'Magasság (mm)', 'Anyag', 'Váz', 'Szín', 'Mennyiség', 'Egység', 'Megjegyzés', 'Forrás']];
     list.forEach(it => {
       const a = st.ai[it.id] || {};
       const notes = notesOf(it).filter(n => st.review[missKey(it, n)] === 'ok' || (n.tipus !== 'hiany' && (n.valoszinuseg == null || n.valoszinuseg >= 50))).map(n => n.szoveg).join(' | ');
-      rows.push([it.id, it.name, it.spec, a.szelesseg_mm || '', a.melyseg_mm || '', a.magassag_mm || '', a.anyag || '', a.vaz || '', a.szin || '', it.qty, it.unit, notes, `${it.sheet}, ${it.row}. sor`]);
+      rows.push([it.id, MCONF[makerConf(it)].label, it.name, it.spec, a.szelesseg_mm || '', a.melyseg_mm || '', a.magassag_mm || '', a.anyag || '', a.vaz || '', a.szin || '', it.qty, it.unit, notes, `${it.sheet}, ${it.row}. sor`]);
     });
     const ws = XLSX.utils.aoa_to_sheet(head.concat(rows));
-    ws['!cols'] = [10, 34, 60, 10, 10, 10, 30, 24, 16, 10, 8, 50, 22].map(w => ({ wch: w }));
+    ws['!cols'] = [10, 12, 34, 60, 10, 10, 10, 30, 24, 16, 10, 8, 50, 22].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, g.title.slice(0, 30));
     XLSX.writeFile(wb, `${(projectTitle() || 'ajanlatkeres').replace(/[\\/:*?"<>|]/g, '').slice(0, 60)} - ${g.title}.xlsx`);
   }
+  // Mennyire biztos a gyártási besorolás. Ha a feldolgozás nem adott értéket (régebbi futás), szabály alapján:
+  // kézzel átállított = biztos; vegyes (fa+fém) és kárpitos = bizonytalan (attól függ, házon belül gyártják-e); a többi valószínű.
+  const MCONF = { biztos: { label: 'biztos', cls: 'ok' }, valoszinu: { label: 'valószínű', cls: 'warn' }, bizonytalan: { label: 'bizonytalan', cls: 'neg' } };
+  function makerConf(it) {
+    const a = st.ai[it.id] || {};
+    if (a.gyarto_indok === 'Kézzel átállítva.') return 'biztos';
+    if (MCONF[a.gyarto_biztos]) return a.gyarto_biztos;
+    return a.gyarto === 'fa_fem' || a.gyarto === 'karpit' ? 'bizonytalan' : 'valoszinu';
+  }
+  const confRank = { bizonytalan: 0, valoszinu: 1, biztos: 2 };
   function viewSplit() {
     const el = $('#view-bontas');
     if (!items().some(i => st.ai[i.id])) { el.innerHTML = waiting('A gyártási bontás'); return; }
-    let h = `<div class="view-head"><div><h2>Tételek és gyártás</h2><p>Ki készíti az egyes tételeket. A vegyes (fémváz + lapanyag) tételek mindkét üzem listáján megjelennek.</p></div>
+    let h = `<div class="view-head"><div><h2>Tételek és gyártás</h2><p>Ki készíti az egyes tételeket. Minden tételnél ott van, mennyire biztos a besorolás és miért; a bizonytalanok vannak elöl. A „Részletes tétellista” oldalon átállítható. A vegyes (fémváz + lapanyag) tételek mindkét üzem listáján megjelennek.</p></div>
       <div><button class="btn" data-tab="tetelek">Részletes tétellista, minden oszloppal →</button></div></div>`;
     const groups = [
       { k: 'fa', title: 'Faüzem', test: m => m === 'fa' || m === 'fa_fem' },
@@ -535,12 +557,12 @@
       { k: 'beszallitoi', title: 'Beszállítói tételek (árajánlatot kell kérni)', test: m => m === 'beszallitoi' }
     ];
     for (const g of groups) {
-      const list = items().filter(i => g.test(makerOf(i)));
+      const list = items().filter(i => g.test(makerOf(i))).sort((p, q) => confRank[makerConf(p)] - confRank[makerConf(q)]);
       if (!list.length) continue;
       h += `<div class="card"><div class="card-h"><h3><span class="mk ${MAKERS[g.k].cls}">${g.title}</span></h3><span class="muted">${list.length} tétel · ${esc(qtyText(list))}</span>
         <span class="ws-act"><button class="btn btn-sm btn-primary" data-ws="${g.k}">Letöltés (Excel)</button>${g.k === 'beszallitoi' ? ' <button class="btn btn-sm" id="btn-rfq">Ajánlatkérő szöveg másolása</button>' : ''}</span></div>
         <div class="tbl-wrap"><table class="compact"><thead><tr><th>Tétel</th><th>Megnevezés</th><th>Méret (mm)</th><th>${g.k === 'fem' ? 'Váz' : 'Anyag'}</th><th class="num">Menny.</th><th>Rész</th></tr></thead><tbody>
-        ${list.map(i => { const a = st.ai[i.id]; return `<tr><td class="code">${esc(i.id)}</td><td>${esc(i.name)}${makerOf(i) === 'fa_fem' ? ' <span class="badge grey">vegyes</span>' : ''}</td><td class="mono">${esc(dims(a))}</td><td>${esc(g.k === 'fem' ? (a.vaz || a.anyag) : a.anyag)}</td><td class="num">${fmt(i.qty)} ${esc(i.unit)}</td><td class="muted">${esc(i.part)}</td></tr>`; }).join('')}
+        ${list.map(i => { const a = st.ai[i.id]; return `<tr><td class="code">${esc(i.id)}</td><td>${esc(i.name)}${makerOf(i) === 'fa_fem' ? ' <span class="badge grey">vegyes</span>' : ''}<div class="mconf"><span class="badge ${MCONF[makerConf(i)].cls}" title="Mennyire biztos, hogy ide tartozik">${MCONF[makerConf(i)].label}</span> <span class="muted small">${esc((st.ai[i.id] || {}).gyarto_indok || '')}</span></div></td><td class="mono">${esc(dims(a))}</td><td>${esc(g.k === 'fem' ? (a.vaz || a.anyag) : a.anyag)}</td><td class="num">${fmt(i.qty)} ${esc(i.unit)}</td><td class="muted">${esc(i.part)}</td></tr>`; }).join('')}
         </tbody></table></div></div>`;
     }
     el.innerHTML = h;
@@ -658,8 +680,8 @@
   function gkMissingHtml() {
     const list = Egyezes.missingGroups();
     if (!list.length) return '';
-    return `<div class="card eg-miss"><div class="card-h"><h3>Nincs a tételjegyzékben: rákérdezni árazás előtt (${list.length})</h3><button class="btn btn-sm" data-tab="kerdesek">Kérdés a generálkivitelezőnek →</button></div>
-      <div class="card-b"><p class="muted small" style="margin:0 0 8px">Ezek a konszignációban vagy a tervlapokon szerepelnek, de a tételjegyzékben nincs soruk. Ha az ajánlat része, az ára most kimaradna; ha más alvállalkozó árazza, ezt a generálkivitelezőnek kell megerősítenie.</p>
+    return `<div class="card eg-miss"><div class="card-h"><h3>Nincs a küldött listában: kié? (${list.length})</h3><button class="btn btn-sm" data-tab="kerdesek">Kérdés a generálkivitelezőnek →</button></div>
+      <div class="card-b"><p class="muted small" style="margin:0 0 8px">Ezek a konszignációban vagy a tervlapokon szerepelnek, a Garzonnak küldött tételjegyzékben nincs soruk. Valószínűleg más alvállalkozó szállítja őket; ha mégis az ajánlat részei, az áruk most kimaradna. Árazás előtt érdemes megerősíttetni.</p>
       <div class="tbl-wrap"><table class="compact"><thead><tr><th>Jel</th><th>Megnevezés</th><th class="num">Konszignáció</th><th class="num">Rajzon</th></tr></thead><tbody>
       ${list.map(g => `<tr><td class="code">${g.codes.map(esc).join(', ')}</td><td>${esc(g.name)}</td><td class="num">${g.kQty == null ? '–' : fmt(g.kQty) + ' ' + esc(g.unit)}</td><td class="num">${g.pCount ? g.pCount + ' hely' : '–'}</td></tr>`).join('')}
       </tbody></table></div></div></div>`;

@@ -18,6 +18,7 @@ Szabályok:
   "karpit" = kárpitozott tétel, ahol a kárpitos munka a meghatározó.
   "beszallitoi" = jellemzően készen vásárolt kereskedelmi termék (forgószék gázrugóval, műanyag szék, tábla, szőnyeg, gép, lámpa).
 - gyarto_indok: egy rövid mondat, a tétel szövegére hivatkozva.
+- gyarto_biztos: mennyire egyértelmű a besorolás a leírásból: "biztos" (az anyag egyértelműen meghatározza, például laminált bútorlap szekrény = fa, kész kereskedelmi termék márkanévvel = beszallitoi), "valoszinu" (a leírás alapján valószínű, de lehet másképp is), "bizonytalan" (vegyes, vagy attól függ, hogy a cég maga gyártja-e: például kárpitozott szék, fémvázas asztal, egyedi pult).
 - biztonsag: 0-100, mennyire egyértelmű a tétel leírása az árazáshoz.
 - eszrevetelek: minden, ami lehetséges, hogy hibás vagy tisztázandó, az árazást vagy a gyártást érintően. Típusok:
   "ellentmondas" = a szöveg önmagának mond ellent (két eltérő méret, anyag vagy vastagság).
@@ -72,6 +73,7 @@ const SCHEMA = {
         karpit: S.str,
         gyarto: { type: 'STRING', enum: ['fa', 'fem', 'fa_fem', 'karpit', 'beszallitoi'] },
         gyarto_indok: S.str,
+        gyarto_biztos: { type: 'STRING', enum: ['biztos', 'valoszinu', 'bizonytalan'] },
         biztonsag: S.int,
         eszrevetelek: S.arr({
           type: 'OBJECT',
@@ -80,7 +82,7 @@ const SCHEMA = {
           propertyOrdering: ['tipus', 'szoveg', 'idezet', 'ha_megsem_hiba', 'valoszinuseg']
         })
       },
-      required: ['id', 'kategoria', 'szelesseg_mm', 'melyseg_mm', 'magassag_mm', 'anyag', 'gyarto', 'gyarto_indok', 'biztonsag', 'eszrevetelek']
+      required: ['id', 'kategoria', 'szelesseg_mm', 'melyseg_mm', 'magassag_mm', 'anyag', 'gyarto', 'gyarto_indok', 'gyarto_biztos', 'biztonsag', 'eszrevetelek']
     })
   },
   required: ['tetelek']
