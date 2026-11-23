@@ -1351,7 +1351,15 @@
         const list = Array.isArray(file) ? file : [file];
         for (const f of list) {
           st.reading = 'Olvasás: ' + f.name; rawFiles[f.name] = f; render();
-          const d = await Parse.readDocument(f, p => api('ocr', p), (done, all) => { st.reading = 'Szkennelt PDF, szövegfelismerés: ' + f.name + ' (' + done + ' / ' + all + ' oldal)'; render(); });
+          // Szkennelt PDF: a szövegfelismerés eredményét a böngésző megjegyzi (fájlnév + méret), így ugyanazt a fájlt
+          // másodszor nem küldjük el újra: nem fogy kredit, és nem kell fél percet várni.
+          const ocrKey = 'ocr:' + f.name + '|' + f.size;
+          let d = null;
+          try { const c = localStorage.getItem(ocrKey); if (c) d = JSON.parse(c); } catch (e) { d = null; }
+          if (!d) {
+            d = await Parse.readDocument(f, p => api('ocr', p), (done, all) => { st.reading = 'Szkennelt PDF, szövegfelismerés: ' + f.name + ' (' + done + ' / ' + all + ' oldal)'; render(); });
+            if (d.scanned && !(d.failedPages && d.failedPages.length)) { try { localStorage.setItem(ocrKey, JSON.stringify(d)); } catch (e) { /* megtelt a tároló: legközelebb újra felismerjük */ } }
+          }
           st.docs = st.docs.filter(x => x.fileName !== d.fileName).concat(d);
         }
         setDocs(st.docs);
