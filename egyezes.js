@@ -97,7 +97,10 @@
         const spec = col.spec != null ? String(val(r, col.spec)).trim() : '';
         const row = { row: r + 1, sheet: sheetName, no, codeCell, codes: expandCodes(codeCell), text, spec, qty: Number.isFinite(qty) ? qty : null, unit: String(col.unit != null ? val(r, col.unit) : '').trim() || 'db', section, hidden, issues: [] };
         if (hidden) row.issues.push({ t: 'Rejtett sor', d: `Az Excelben a ${r + 1}. sor el van rejtve: megnyitáskor és nyomtatásban nem látszik, csak az elrejtés megszüntetésével. Ezért könnyű kihagyni az árból. Lehet szándékos (nem része a munkának), lehet véletlen: érdemes megkérdezni, hogy árazandó-e.`, p: 50 });
-        if (noErr) row.issues.push({ t: 'Hibás sorszám', d: 'A sorszám cellája hibás hivatkozást ad (#REF!): a táblázatból sorokat töröltek vagy másoltak, a sorszámozás nem megbízható.', p: 60 });
+        // A hibás sorszám helye és tartalma, hogy a forrásnál meg lehessen mutatni (például: A22 cella, #REF!).
+        const noAddr = noErr ? XLSX.utils.encode_cell({ r, c: col.no }) : '';
+        const noShown = noErr ? String(noCell.w || (noCell.f ? '=' + noCell.f : '') || '#REF!') : '';
+        if (noErr) row.issues.push({ t: 'Hibás sorszám', d: `A ${r + 1}. sor sorszám-cellájában (${noAddr}) nem szám áll, hanem a „${noShown}” hibaüzenet. Az Excel ezt írja ki, ha egy képlet olyan sorra hivatkozik, amelyet töröltek. Magát a tételt nem érinti, de azt jelzi, hogy a táblázatból sorokat töröltek vagy másoltak: érdemes megnézni, nem hiányzik-e tétel.`, p: 60, cell: noAddr, shown: noShown });
         if (/nincs pontos adat|nincs adat|rajz szerint\?|tisztázandó/i.test(text + ' ' + spec)) row.issues.push({ t: 'Hiányzó adat', d: `A sor szövege szerint nincs pontos adat: „${text.replace(/\s+/g, ' ').slice(0, 80)}”.`, p: 90 });
         if (!row.codes.length) row.issues.push({ t: 'Nincs alaprajzi jel', d: 'A tételnek nincs jele, ezért nem párosítható a konszignációval és a rajzzal.', p: 60 });
         if (row.qty == null) row.issues.push({ t: 'Nincs mennyiség', d: 'A mennyiség cellája üres vagy nem szám.', p: 85 });
@@ -532,7 +535,7 @@
     'Kihagyott sorszámok': 'A sorszámozásban lyuk van: valószínűleg sorokat töröltek a táblázatból. Ha a törölt sor egy tétel volt, az nem kerül bele az árba.',
     'Nincs alaprajzi jel': 'A tételhez nincs alaprajzi jel, ezért a program nem tudja párosítani a konszignációval és a rajzzal. A méretét és darabszámát kézzel kell ellenőrizni.',
     'Rejtett sor': 'Ezek a sorok el vannak rejtve az Excelben: megnyitáskor és nyomtatásban nem látszanak, csak az elrejtés megszüntetésével. Ezért könnyű kihagyni őket az árból. Lehet szándékos (nem része a munkának), lehet véletlen: egy kérdésben érdemes tisztázni, hogy árazandók-e.',
-    'Hibás sorszám': 'A sorszám cellája hibás hivatkozás (#REF!): sorokat töröltek vagy másoltak, a sorszámozás nem megbízható.',
+    'Hibás sorszám': 'Ezeknél a soroknál a sorszám helyén nem szám áll, hanem a „#REF!” hibaüzenet. Az Excel ezt írja ki, ha egy képlet olyan sorra hivatkozik, amelyet töröltek. Magukat a tételeket nem érinti, de azt jelzi, hogy a táblázatból sorokat töröltek vagy másoltak át: érdemes megnézni, nem hiányzik-e tétel. A „Források” gomb megmutatja a hibás cellát.',
     'Hiányzó adat': 'A sor szövege szerint nincs pontos adat. Árazás előtt tisztázni kell.',
     'Nincs mennyiség': 'A mennyiség cellája üres vagy nem szám, ezért a tétel nem árazható.'
   };
@@ -652,7 +655,7 @@
   }
   // Ellenőrzés: a három forrás egymás mellett, hogy egy pillantással látszódjon, tényleg mindhárom helyen ott van-e.
   function detailHtml(g, idx) {
-    const tj = g.rows.length ? g.rows.map(r => `<div class="eg-src"><div class="eg-src-h"><b>${r.row}. sor</b> · ${esc(r.codeCell || '–')} · <b>${r.qty == null ? 'nincs mennyiség' : fmt(r.qty) + ' ' + esc(r.unit)}</b>${r.hidden ? ' · <span class="neg-t">rejtett sor</span>' : ''}</div>
+    const tj = g.rows.length ? g.rows.map(r => `<div class="eg-src"><div class="eg-src-h"><b>${r.row}. sor</b> · ${esc(r.codeCell || '–')} · <b>${r.qty == null ? 'nincs mennyiség' : fmt(r.qty) + ' ' + esc(r.unit)}</b>${r.hidden ? ' · <span class="neg-t">rejtett sor</span>' : ''}</div>${r.issues.length ? `<div class="eg-iss">${r.issues.map(i => `<div>⚠ <b>${esc(i.t)}${i.cell ? ` (${esc(i.cell)} cella: ${esc(i.shown)})` : ''}:</b> ${esc(i.t === 'Rejtett sor' ? 'a sor el van rejtve az Excelben, megnyitáskor és nyomtatásban nem látszik.' : i.t === 'Hibás sorszám' ? 'a sorszám helyén hibaüzenet áll; sorokat töröltek vagy másoltak a táblázatban.' : i.d)}</div>`).join('')}</div>` : ''}
         <div>${esc(r.text.replace(/\s+/g, ' ').slice(0, 260))}</div>${r.spec ? `<div class="muted small">${esc(r.spec.replace(/\s+/g, ' ').slice(0, 220))}</div>` : ''}
         <button class="btn btn-sm" data-eg-sheet="${r.row}">Táblázat</button></div>`).join('') : '<div class="muted">A tételjegyzékben nincs ilyen sor.</div>';
     const ks = g.konsz.length ? g.konsz.map(k => `<div class="eg-src"><div class="eg-src-h"><b>${esc(k.fileName.replace(/\.pdf$/i, '').slice(-34))}</b> · ${k.page}. oldal · <b>${k.qty == null ? 'nincs mennyiség' : fmt(k.qty) + ' ' + esc(k.unit)}</b></div>

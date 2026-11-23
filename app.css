@@ -272,3 +272,6 @@ h4.sec.q-to { display: flex; align-items: center; gap: 10px; text-transform: non
 .egc .quote { margin: 0 0 8px; }
 .egc .whynot { margin: 4px 0 6px; font-size: 13px; color: var(--muted); }
 h4.sec.eg-band.band-h .band-act { margin-left: auto; }
+/* Egyezés: a táblázatbeli hiba a forrás dobozban, a helyével */
+.eg-iss { margin: 4px 0 6px; padding: 6px 8px; background: #fdf3f1; border: 1px solid #f0d2cc; border-radius: 4px; font-size: 12px; line-height: 1.45; color: #6b2b20; }
+.eg-iss b { color: #8a3b2e; }

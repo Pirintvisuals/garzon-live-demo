@@ -1343,7 +1343,16 @@
       if (kind === 'sheet') {
         st.files.sheet = file; st.book = null; st.detecting = true; rawFiles[file.name] = file; render();
         Egyezes.trySheet(file);
-        try { st.book = await Parse.readWorkbook(await file.arrayBuffer(), file.name, sheets => api('columns', { sheets })); } finally { st.detecting = false; }
+        // Ha a fejlécet a modell ismeri fel (szokatlan táblázat), a választ a böngésző megjegyzi (fájlnév + méret),
+        // így ugyanannál a táblázatnál másodszor nem kell rá kreditet költeni.
+        const colKey = 'cols:' + file.name + '|' + file.size;
+        const detectCols = async sheets => {
+          try { const c = localStorage.getItem(colKey); if (c) return JSON.parse(c); } catch (e) { /* nincs tároló */ }
+          const out = await api('columns', { sheets });
+          try { localStorage.setItem(colKey, JSON.stringify(out)); } catch (e) { /* megtelt a tároló */ }
+          return out;
+        };
+        try { st.book = await Parse.readWorkbook(await file.arrayBuffer(), file.name, detectCols); } finally { st.detecting = false; }
         st.ai = {}; st.tender = null; st.rev = null; st.partStatus = {}; st.tenderStatus = 'idle'; st.elapsedMs = 0;
         if (st.book.items.length) checkSaved();
         if (!st.book.items.length) { alert('Ebben a táblázatban nem találtam tételjegyzéket.' + (st.book.aiError ? ' (' + st.book.aiError + ')' : '')); st.book = null; st.files.sheet = null; }
